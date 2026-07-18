@@ -1,0 +1,12 @@
+{
+  "sampleFrames": 180,
+  "averageFps": 60,
+  "p95FrameMs": 17.5,
+  "movementStepCv": 0.021,
+  "render": {
+    "fps": 59,
+    "quality": "高",
+    "postFx": true,
+    "pixelRatio": 1
+  }
+}

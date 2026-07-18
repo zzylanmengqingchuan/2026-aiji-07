@@ -1,0 +1,12 @@
+{
+  "metrics": {
+    "fps": 58,
+    "drawCalls": 24,
+    "triangles": 676
+  },
+  "consoleReady": true,
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  }
+}

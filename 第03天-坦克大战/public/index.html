@@ -234,12 +234,22 @@
 <div id="conn">未连接</div>
 
 <script src="/vendor/three/three.min.js"></script>
+<script src="/js/visual-foundation.js"></script>
+<script src="/vendor/three/shaders/CopyShader.js"></script>
+<script src="/vendor/three/shaders/LuminosityHighPassShader.js"></script>
+<script src="/vendor/three/postprocessing/EffectComposer.js"></script>
+<script src="/vendor/three/postprocessing/ShaderPass.js"></script>
+<script src="/vendor/three/postprocessing/RenderPass.js"></script>
+<script src="/vendor/three/postprocessing/UnrealBloomPass.js"></script>
+<script src="/vendor/three/shaders/FXAAShader.js"></script>
 <script>
 'use strict';
 if (typeof THREE === 'undefined') {
   document.getElementById('err').textContent = 'three.js 加载失败，请检查网络后刷新';
   throw new Error('THREE missing');
 }
+if (!window.TankVisuals) throw new Error('visual foundation missing');
+const PALETTE = window.TankVisuals.PALETTE;
 
 // ---------- DOM ----------
 const canvas = document.getElementById('c');
@@ -446,7 +456,8 @@ function updateEngineSound(speed){
 
 // ---------- Three.js scene ----------
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+let renderPixelRatio=Math.min(devicePixelRatio,1.15);
+renderer.setPixelRatio(renderPixelRatio);
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -455,8 +466,8 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = .88;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xa9c8d7);
-scene.fog = new THREE.Fog(0xa9c8d7, 88, 185);
+scene.background = new THREE.Color(PALETTE.sky);
+scene.fog = new THREE.Fog(PALETTE.sky, 88, 185);
 const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .1, 400);
 const camera2D = new THREE.OrthographicCamera(-70, 70, 70, -70, .1, 400);
 camera2D.up.set(0, 0, -1);
@@ -488,24 +499,46 @@ scene.add(sun);
 const flash = new THREE.PointLight(0xffaa33, 0, 32);
 scene.add(flash);
 
+// 轻量后处理：默认开启低强度 Bloom + FXAA + 暗角；帧率不足时自动降级为直接渲染。
+const composer = new THREE.EffectComposer(renderer);
+const renderPass = new THREE.RenderPass(scene,camera);
+const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth*.5,innerHeight*.5),.28,.38,.82);
+const fxaaPass = new THREE.ShaderPass(THREE.FXAAShader);
+const vignettePass = new THREE.ShaderPass(window.TankVisuals.VignetteShader);
+composer.addPass(renderPass); composer.addPass(bloomPass); composer.addPass(fxaaPass); composer.addPass(vignettePass);
+let postFxEnabled=!matchMedia('(prefers-reduced-motion: reduce)').matches;
+const frameHealth={fps:60,frames:0,elapsed:0,lastAdjust:0,quality:'高'};
+function resizePostFx(){
+  composer.setPixelRatio(renderPixelRatio); composer.setSize(innerWidth,innerHeight);
+  fxaaPass.material.uniforms.resolution.value.set(1/(innerWidth*renderPixelRatio),1/(innerHeight*renderPixelRatio));
+}
+resizePostFx();
+function updateRenderQuality(dt,now){
+  frameHealth.frames++; frameHealth.elapsed+=dt;
+  if(frameHealth.elapsed<2) return;
+  frameHealth.fps=Math.round(frameHealth.frames/frameHealth.elapsed);
+  frameHealth.frames=0; frameHealth.elapsed=0;
+  if(now-frameHealth.lastAdjust>3500){
+    if(frameHealth.fps<48 && postFxEnabled){
+      postFxEnabled=false; renderPixelRatio=Math.min(devicePixelRatio,.9); frameHealth.quality='流畅';
+      renderer.setPixelRatio(renderPixelRatio); renderer.setSize(innerWidth,innerHeight); frameHealth.lastAdjust=now;
+    }else if(frameHealth.fps<54 && renderPixelRatio>.9){
+      renderPixelRatio=.9; frameHealth.quality='平衡'; renderer.setPixelRatio(renderPixelRatio); resizePostFx(); frameHealth.lastAdjust=now;
+    }
+  }
+  window.__tankPerf={fps:frameHealth.fps,quality:frameHealth.quality,postFx:postFxEnabled,pixelRatio:renderPixelRatio};
+}
+
 let A = 55;
 function makeGroundTexture(){
-  const cv=document.createElement('canvas'); cv.width=cv.height=512;
-  const ctx=cv.getContext('2d');
-  ctx.fillStyle='#566f3d'; ctx.fillRect(0,0,512,512);
-  for(let i=0;i<6500;i++){
-    const g=70+Math.random()*48|0;
-    ctx.fillStyle=`rgba(${48+g*.18|0},${g},${35+g*.1|0},${.05+Math.random()*.12})`;
-    const s=.5+Math.random()*2.2; ctx.fillRect(Math.random()*512,Math.random()*512,s,s);
-  }
-  const tex=new THREE.CanvasTexture(cv);
-  tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(9,9);
+  const tex=window.TankVisuals.createGroundTexture(THREE,512);
+  tex.repeat.set(9,9);
   tex.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
   return tex;
 }
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(A*2+60, A*2+60),
-  new THREE.MeshStandardMaterial({color:0x5d7b43,map:makeGroundTexture(),roughness:1})
+  new THREE.MeshStandardMaterial({color:0xffffff,map:makeGroundTexture(),roughness:1})
 );
 ground.rotation.x = -Math.PI/2;
 ground.receiveShadow = true;
@@ -545,9 +578,9 @@ const leafMats=[0x294b32,0x355b39,0x476a3e].map(color=>new THREE.MeshStandardMat
 function addTree(x,z,s=1){
   const g=new THREE.Group();
   const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.28*s,.42*s,3.5*s,6),trunkMat);
-  trunk.position.y=1.75*s; trunk.castShadow=true; g.add(trunk);
+  trunk.position.y=1.75*s; trunk.castShadow=false; g.add(trunk);
   const crown=new THREE.Mesh(new THREE.ConeGeometry(1.65*s,4.6*s,7),leafMats[(Math.abs(x*13+z*7)|0)%leafMats.length]);
-  crown.position.y=4.6*s; crown.castShadow=true; g.add(crown);
+  crown.position.y=4.6*s; crown.castShadow=false; g.add(crown);
   g.position.set(x,0,z); g.rotation.y=(x*z)*.013; terrainGroup.add(g);
 }
 for(let i=0;i<44;i++){
@@ -560,7 +593,7 @@ const rockMat=new THREE.MeshStandardMaterial({color:0x697168,roughness:1,flatSha
 for(let i=0;i<32;i++){
   const ang=i*2.399, rad=42+(i%4)*3.2, x=Math.cos(ang)*rad, z=Math.sin(ang)*rad;
   const rock=new THREE.Mesh(new THREE.DodecahedronGeometry(.45+(i%3)*.18,0),rockMat);
-  rock.scale.y=.6; rock.position.set(x,.25,z); rock.rotation.set(i*.31,i*.73,0); rock.castShadow=true; terrainGroup.add(rock);
+  rock.scale.y=.6; rock.position.set(x,.25,z); rock.rotation.set(i*.31,i*.73,0); rock.castShadow=false; terrainGroup.add(rock);
 }
 
 const wallMat = new THREE.MeshStandardMaterial({color:0x465b3d, roughness:1});
@@ -791,7 +824,7 @@ dustFx.init();
 
 let grassSeed=93721;
 function grassRand(){ grassSeed=(grassSeed*16807)%2147483647; return (grassSeed-1)/2147483646; }
-const grassCount=520, grassRecords=[];
+const grassCount=420, grassRecords=[];
 const grassObstacleLayout=[
   [0,0,3.2,3.2],[-18,-12,2.4,2.8],[16,-18,2.6,2.2],[-22,14,2.2,2.6],[20,16,2.8,2.4],[-8,22,2,2.4],
   [10,-26,2.4,2],[-28,-4,2.2,3],[26,6,2.6,2.2],[4,12,2,2],[-12,-24,2.8,2.2],[14,26,2.2,2.6],
@@ -812,7 +845,7 @@ for(let i=0;i<grassCount;i++){
 }
 let grassAcc=0;
 function updateGrass(dt,now,positions){
-  grassAcc+=dt; if(grassAcc<.075) return; const step=grassAcc; grassAcc=0;
+  grassAcc+=dt; if(grassAcc<.12) return; const step=grassAcc; grassAcc=0;
   for(let i=0;i<grassRecords.length;i++){
     const r=grassRecords[i];
     let pressed=false;
@@ -910,6 +943,7 @@ const powerMeshes = new Map();
 const visibleTankPositions = [];
 let localVisualSpeed = 0;
 let cameraShake = 0;
+const debugMotion = new URLSearchParams(location.search).get('debug') === '1';
 let obstaclesReady = false;
 let lastHudAt = 0;
 let lastLobbyHtml = '';
@@ -953,9 +987,26 @@ function updateFollowOptions(players){
 
 // 本地预测 + 远端插值（缓解 Cloudflare 隧道高延迟）
 const PLAYER_SPEED = 16;
-const pred = { x:0, z:0, yaw:0, turretYaw:0, active:false };
-// id -> { from, to, fromT, toT }
+const pred = { x:0, z:0, yaw:0, turretYaw:0, serverX:0, serverZ:0, active:false };
+// 远端玩家保留短样本队列，统一在“当前时间 - 100ms”处插值，避免每包到达时重置起点。
 const remoteBuf = new Map();
+const REMOTE_DELAY_MS=100;
+function remotePose(buffer,now=performance.now()){
+  const samples=buffer && buffer.samples;
+  if(!samples || !samples.length) return {x:0,z:0,yaw:0,turretYaw:0};
+  const renderAt=now-REMOTE_DELAY_MS;
+  if(renderAt<=samples[0].t) return samples[0];
+  for(let i=0;i<samples.length-1;i++){
+    const a=samples[i],b=samples[i+1];
+    if(renderAt>b.t) continue;
+    const t=Math.max(0,Math.min(1,(renderAt-a.t)/Math.max(1,b.t-a.t)));
+    // 位移必须恒速插值；逐网络段使用 smoothstep 会在每个包的边界反复减速、加速，产生 20Hz 微顿。
+    // 角度仍用柔和曲线，避免炮塔或车身在转向包到达时突然折线变化。
+    const angleT=t*t*(3-2*t);
+    return {x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t,yaw:a.yaw+normAng(b.yaw-a.yaw)*angleT,turretYaw:a.turretYaw+normAng(b.turretYaw-a.turretYaw)*angleT};
+  }
+  return samples[samples.length-1];
+}
 const FIXED_OBSTACLES = [
   [0,0,3.2,3.2,2.4],[-18,-12,2.4,2.8,2.2],[16,-18,2.6,2.2,2.8],[-22,14,2.2,2.6,2.0],
   [20,16,2.8,2.4,2.6],[-8,22,2.0,2.4,1.9],[10,-26,2.4,2.0,2.2],[-28,-4,2.2,3.0,2.5],
@@ -1095,27 +1146,27 @@ function onState(s){
   // 远端插值缓冲 + 本地预测校正
   for(const p of s.players){
     if(p.id === myId){
-      if(!pred.active || prevPhase !== 'playing' && s.phase === 'playing' || s.phase === 'countdown'){
-        pred.x = p.x; pred.z = p.z; pred.yaw = p.yaw; pred.turretYaw = p.turretYaw; pred.active = true;
+      const phaseSpawn=prevPhase!==s.phase && (s.phase==='countdown' || s.phase==='playing');
+      if(!pred.active || phaseSpawn){
+        pred.x = p.x; pred.z = p.z; pred.yaw = p.yaw; pred.turretYaw = p.turretYaw;
+        pred.serverX=p.x; pred.serverZ=p.z; pred.active = true;
       } else {
-        // 软校正，避免瞬移
         const dx = p.x - pred.x, dz = p.z - pred.z;
         const dist = Math.hypot(dx, dz);
-        if(dist > 4){ pred.x = p.x; pred.z = p.z; }
-        else { pred.x += dx * 0.25; pred.z += dz * 0.25; }
-        pred.yaw += normAng(p.yaw - pred.yaw) * 0.35;
-        pred.turretYaw += normAng(p.turretYaw - pred.turretYaw) * 0.45;
+        pred.serverX=p.x; pred.serverZ=p.z;
+        // 只对明显失配做瞬时纠正；普通网络滞后交给每帧阻尼处理，避免“前进—拉回”锯齿。
+        if(dist > 6){ pred.x = p.x; pred.z = p.z; }
       }
     } else {
       let b = remoteBuf.get(p.id);
       if(!b){
-        b = { x:p.x, z:p.z, yaw:p.yaw, turretYaw:p.turretYaw, tx:p.x, tz:p.z, tyaw:p.yaw, ttur:p.turretYaw };
+        b = {samples:[]};
         remoteBuf.set(p.id, b);
-      } else {
-        b.x = b.tx; b.z = b.tz; b.yaw = b.tyaw; b.turretYaw = b.ttur;
-        b.tx = p.x; b.tz = p.z; b.tyaw = p.yaw; b.ttur = p.turretYaw;
       }
-      b.t0 = now; b.t1 = now + 70; // 约 1 个 tick 的插值窗口
+      const previous=b.samples[b.samples.length-1];
+      if(previous && Math.hypot(previous.x-p.x,previous.z-p.z)>9) b.samples.length=0;
+      b.samples.push({t:now,x:p.x,z:p.z,yaw:p.yaw,turretYaw:p.turretYaw});
+      while(b.samples.length>8 || (b.samples[1] && b.samples[1].t<now-450)) b.samples.shift();
       b.alive = p.alive; b.shield = p.shield||0; b.invuln = p.invuln||0;
       b.color = p.color; b.name = p.name;
     }
@@ -1233,13 +1284,8 @@ function updateTankVisuals(now){
       alive=p.alive; shield=p.shield||0; invuln=p.invuln||0;
     } else if(p.id !== myId && remoteBuf.has(p.id)){
       const b = remoteBuf.get(p.id);
-      const t = b.t1>b.t0 ? Math.min(1, Math.max(0, (now-b.t0)/(b.t1-b.t0))) : 1;
-      // smoothstep
-      const u = t*t*(3-2*t);
-      x = b.x + (b.tx-b.x)*u;
-      z = b.z + (b.tz-b.z)*u;
-      yaw = b.yaw + normAng(b.tyaw-b.yaw)*u;
-      tur = b.turretYaw + normAng(b.ttur-b.turretYaw)*u;
+      const pose=remotePose(b,now);
+      x=pose.x; z=pose.z; yaw=pose.yaw; tur=pose.turretYaw;
       alive = b.alive; shield = b.shield; invuln = b.invuln;
     } else {
       x=p.x; z=p.z; yaw=p.yaw; tur=p.turretYaw;
@@ -1255,12 +1301,18 @@ function updateTankVisuals(now){
       const dx=ud.lastX==null?0:x-ud.lastX, dz=ud.lastZ==null?0:z-ud.lastZ;
       const moved=Math.hypot(dx,dz);
       const teleported=moved>7;
-      const speed=teleported?0:Math.min(PLAYER_SPEED*1.5,moved/frameDt);
-      const turnRate=ud.lastYaw==null?0:normAng(yaw-ud.lastYaw)/frameDt;
-      ud.vx=teleported?0:dx/frameDt; ud.vz=teleported?0:dz/frameDt; ud.speed=speed;
+      const rawVx=teleported?0:dx/frameDt,rawVz=teleported?0:dz/frameDt;
+      const smoothing=1-Math.exp(-frameDt*9);
+      ud.vx=(ud.vx||0)+(rawVx-(ud.vx||0))*smoothing;
+      ud.vz=(ud.vz||0)+(rawVz-(ud.vz||0))*smoothing;
+      const rawSpeed=Math.min(PLAYER_SPEED*1.5,Math.hypot(rawVx,rawVz));
+      const speed=(ud.speed||0)+(rawSpeed-(ud.speed||0))*smoothing;
+      const rawTurn=ud.lastYaw==null?0:normAng(yaw-ud.lastYaw)/frameDt;
+      ud.turnRate=(ud.turnRate||0)+(rawTurn-(ud.turnRate||0))*smoothing;
+      ud.speed=speed;
       const accel=(speed-(ud.prevSpeed||0))/frameDt;
       const targetPitch=Math.max(-.12,Math.min(.12,-accel*.006));
-      const targetRoll=Math.max(-.14,Math.min(.14,-turnRate*speed*.006));
+      const targetRoll=Math.max(-.14,Math.min(.14,-ud.turnRate*speed*.006));
       o.rig.rotation.x+=(targetPitch-o.rig.rotation.x)*Math.min(1,frameDt*7);
       o.rig.rotation.z+=(targetRoll-o.rig.rotation.z)*Math.min(1,frameDt*7);
       ud.travel=(ud.travel||0)+moved;
@@ -1305,6 +1357,9 @@ function predictLocal(dt){
     const want = Math.atan2(mx,mz);
     pred.yaw += normAng(want - pred.yaw) * Math.min(1, 10*dt);
   }
+  const ex=pred.serverX-pred.x,ez=pred.serverZ-pred.z,err=Math.hypot(ex,ez);
+  const correctionRate=len>0 ? (err>1.7?Math.min(1,dt*2.2):0) : Math.min(1,dt*9);
+  if(correctionRate>0){ pred.x+=ex*correctionRate; pred.z+=ez*correctionRate; }
   localAim();
   const wantT = Math.atan2(aimPoint.x-pred.x, aimPoint.z-pred.z);
   pred.turretYaw = normAng(wantT - pred.yaw);
@@ -1383,7 +1438,7 @@ function syncPowerups(list){
 function handleEvent(e){
   if(e.kind==='banner') banner(e.text);
   if(e.kind==='sfx'){
-    if(e.name==='shoot'){ Sound.shoot(); cameraShake=Math.max(cameraShake,.035); }
+    if(e.name==='shoot') Sound.shoot();
     if(e.name==='hit') Sound.hit();
     if(e.name==='phit') Sound.phit();
     if(e.name==='boom'){ Sound.boom(); cameraShake=Math.max(cameraShake,.26); if(e.x!=null){ flash.position.set(e.x,3,e.z); flash.intensity=5; particles.spawn({x:e.x,y:1,z:e.z},{count:50,c1:[1,.8,.2],c2:[.9,.2,0],speed:12,life:1.1,up:8}); } }
@@ -1524,6 +1579,7 @@ addEventListener('resize', ()=>{
   camera.updateProjectionMatrix();
   resizeOrthoCamera(isSpectator ? spectatorZoom : 1);
   renderer.setSize(innerWidth, innerHeight);
+  resizePostFx();
 });
 
 function localAim(){
@@ -1590,8 +1646,9 @@ function updateCamera(dt){
     const followed = spectatorFollowId && lastState.players.find(p=>p.id===spectatorFollowId);
     if(followed){
       const b = remoteBuf.get(followed.id);
-      const fx = b ? b.tx : followed.x;
-      const fz = b ? b.tz : followed.z;
+      const pose=b?remotePose(b):followed;
+      const fx = pose.x;
+      const fz = pose.z;
       spectatorFocusX += (fx-spectatorFocusX)*Math.min(1,7*dt);
       spectatorFocusZ += (fz-spectatorFocusZ)*Math.min(1,7*dt);
     }
@@ -1632,7 +1689,7 @@ function updateCamera(dt){
     const alive = lastState.players.find(p=>p.alive);
     if(alive){
       const b = remoteBuf.get(alive.id);
-      if(b){ tx=b.tx; tz=b.tz; } else { tx=alive.x; tz=alive.z; }
+      if(b){ const pose=remotePose(b); tx=pose.x; tz=pose.z; } else { tx=alive.x; tz=alive.z; }
     }
   }
   const localMotion=tankMeshes.get(myId)?.group.userData;
@@ -1649,10 +1706,11 @@ function updateCamera(dt){
   const targetFov=55+Math.min(6,localVisualSpeed*.34);
   if(Math.abs(camera.fov-targetFov)>.02){ camera.fov+=(targetFov-camera.fov)*Math.min(1,dt*4); camera.updateProjectionMatrix(); }
   if(cameraShake>.001){
-    const amount=cameraShake*(.55+Math.random()*.45);
-    camera.position.x+=(Math.random()-.5)*amount;
-    camera.position.y+=(Math.random()-.5)*amount*.55;
-    camera.position.z+=(Math.random()-.5)*amount;
+    // 连续噪声替代逐帧随机数，冲击感仍在，但不会产生高频“屏幕发抖”。
+    const t=performance.now()*.018,amount=cameraShake;
+    camera.position.x+=Math.sin(t*1.17)*amount*.45;
+    camera.position.y+=Math.sin(t*.91+1.8)*amount*.22;
+    camera.position.z+=Math.sin(t*1.43+3.1)*amount*.45;
   }
   camera.lookAt(tx, 0.8, tz);
 }
@@ -1676,7 +1734,7 @@ function drawMinimap(){
   for(const p of lastState.players){
     let x=p.x, z=p.z;
     if(p.id===myId && pred.active){ x=pred.x; z=pred.z; }
-    else if(remoteBuf.has(p.id)){ const b=remoteBuf.get(p.id); x=b.tx; z=b.tz; }
+    else if(remoteBuf.has(p.id)){ const pose=remotePose(remoteBuf.get(p.id)); x=pose.x; z=pose.z; }
     const q=to(x,z);
     ctx.fillStyle = p.alive ? colorHex(p.color) : '#444';
     ctx.beginPath(); ctx.arc(q.x,q.y, p.id===myId?4:3, 0, Math.PI*2); ctx.fill();
@@ -1691,6 +1749,7 @@ function loop(){
   requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), .05);
   const now = performance.now();
+  updateRenderQuality(dt,now);
   if(bannerT>0){ bannerT-=dt; if(bannerT<=0) bannerEl.style.opacity=0; }
   flash.intensity = Math.max(0, flash.intensity - dt*8);
   cameraShake=Math.max(0,cameraShake-dt*.72);
@@ -1717,7 +1776,15 @@ function loop(){
   if(rttMs > 0 && (phase==='playing'||phase==='countdown')){
     connEl.textContent = `延迟约 ${rttMs}ms · ${location.host}`;
   }
-  renderer.render(scene, activeCamera);
+  if(postFxEnabled){ renderPass.camera=activeCamera; composer.render(dt); }
+  else renderer.render(scene, activeCamera);
+  if(debugMotion){
+    window.__tankDebug={
+      now,
+      tanks:Array.from(tankMeshes,([id,o])=>({id,x:o.group.position.x,z:o.group.position.z,yaw:o.group.rotation.y})),
+      camera:{x:activeCamera.position.x,y:activeCamera.position.y,z:activeCamera.position.z},
+    };
+  }
 }
 loop();
 

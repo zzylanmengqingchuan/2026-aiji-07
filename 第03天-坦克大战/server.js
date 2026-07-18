@@ -37,8 +37,9 @@ const ROUNDS_PER_GAME = 3;
 const ROUND_BREAK_SECONDS = Number(process.env.ROUND_BREAK_SECONDS) || 4;
 const COUNTDOWN_SECONDS = Number(process.env.COUNTDOWN_SECONDS) || 3;
 
-const COLORS = [0x35c463, 0x3dbbff, 0xffd54a, 0xff6ad5];
-const COLOR_NAMES = ['翠绿', '天蓝', '金黄', '玫红'];
+// 与前端程序化色板保持一致：低饱和军绿、陶土橙、钢蓝、赭金。
+const COLORS = [0x4f8d5c, 0xd85c41, 0x4f78a8, 0xd6aa3d];
+const COLOR_NAMES = ['军绿', '陶土橙', '钢蓝', '赭金'];
 // 对角优先分配：双人局分别出生在左下角和右上角，避免同边开局直接对射。
 // 四人局仍会使用全部四个角落。
 const SPAWNS = [
