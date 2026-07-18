@@ -1,0 +1,18 @@
+{
+  "name": "tank-battle-4p",
+  "version": "1.0.0",
+  "description": "多人坦克混战：10 局、每局 3 把，支持人类与 Agent",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "three": "^0.128.0",
+    "ws": "^8.18.0"
+  }
+}

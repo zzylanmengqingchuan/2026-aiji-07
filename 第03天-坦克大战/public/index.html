@@ -1,0 +1,1712 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>坦克混战 · Agent Arena</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/assets/tank-arena-home-v1.webp" as="image" type="image/webp">
+<style>
+  :root{
+    --bg:#fff; --fg:#000; --card:#fff;
+    --primary:#e23d2b; --primary-fg:#fff;
+    --secondary:#f5f06e; --secondary-fg:#000;
+    --accent:#3b6ef5; --accent-fg:#fff;
+    --muted:#f4f4f4; --muted-fg:#333;
+    --border:#000; --radius:0px;
+    --shadow:4px 4px 0 0 #000;
+    --font: "DM Sans", system-ui, sans-serif;
+    --mono: "Space Mono", ui-monospace, monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#111;font-family:var(--font);user-select:none;color:var(--fg)}
+  #c{display:block;cursor:none}
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:5}
+  #topleft{position:absolute;top:14px;left:14px}
+  #stats{font-size:13px;font-weight:700;background:var(--secondary);border:2px solid #000;box-shadow:var(--shadow);padding:8px 10px}
+  #stats b{color:var(--primary)}
+  #hpbar{width:220px;height:16px;background:#fff;border:2px solid #000;margin-top:8px;box-shadow:var(--shadow);overflow:hidden}
+  #hpfill{height:100%;width:100%;background:var(--primary);transition:width .1s}
+  #buffs{margin-top:8px;font-size:12px;font-weight:600;background:#fff;border:2px solid #000;padding:6px 8px;box-shadow:var(--shadow);min-height:16px}
+  #plist{margin-top:8px;font-size:12px;line-height:1.65;font-weight:600;background:#fff;border:2px solid #000;padding:8px;box-shadow:var(--shadow);max-width:280px}
+  #minimap{position:absolute;top:14px;right:14px;border:3px solid #000;box-shadow:var(--shadow);background:#fff}
+  #viewControls{position:absolute;top:178px;right:14px;display:none;gap:8px;pointer-events:auto;flex-wrap:wrap;justify-content:flex-end;max-width:min(680px,calc(100vw - 28px))}
+  #viewControls.show{display:flex}
+  .view-btn{cursor:pointer;border:2px solid #000;background:#fff;color:#000;font-weight:800;padding:7px 10px;box-shadow:2px 2px 0 #000}
+  .view-btn.active{background:var(--accent);color:#fff}
+  #followSelect{cursor:pointer;border:2px solid #000;background:#fff;color:#000;font-weight:800;padding:7px 10px;box-shadow:2px 2px 0 #000;max-width:190px}
+  #spectatorHint{position:absolute;top:224px;right:14px;display:none;background:rgba(255,255,255,.94);border:2px solid #000;box-shadow:2px 2px 0 #000;padding:7px 10px;font-size:12px;font-weight:800}
+  #spectatorHint.show{display:block}
+  #matchActions{position:absolute;right:14px;bottom:18px;display:none;pointer-events:auto}
+  #matchActions.show{display:block}
+  #btnStopMatch{cursor:pointer;border:2px solid #000;background:#e23d2b;color:#fff;font-weight:900;padding:9px 13px;box-shadow:3px 3px 0 #000}
+  #banner{position:absolute;top:16%;width:100%;text-align:center;font-size:40px;font-weight:800;color:#000;background:var(--secondary);border:3px solid #000;box-shadow:var(--shadow);width:auto;left:50%;transform:translateX(-50%);padding:8px 20px;opacity:0;transition:opacity .25s;pointer-events:none}
+  #cross{position:fixed;width:26px;height:26px;margin:-13px 0 0 -13px;pointer-events:none;z-index:6}
+  #cross::before,#cross::after{content:'';position:absolute;background:var(--primary)}
+  #cross::before{left:12px;top:0;width:3px;height:26px}
+  #cross::after{top:12px;left:0;width:26px;height:3px}
+
+  #overlay{--scene-x:0px;--scene-y:0px;position:fixed;inset:0;z-index:10;overflow:auto;isolation:isolate;
+    background:#07111f;padding:28px 16px 40px;display:flex;flex-direction:column;align-items:center}
+  #overlay::before{content:'';position:fixed;inset:-5%;z-index:0;pointer-events:none;
+    background:url('/assets/tank-arena-home-v1.webp') center/cover no-repeat;
+    transform:translate3d(var(--scene-x),var(--scene-y),0) scale(1.07);
+    animation:sceneDrift 18s ease-in-out infinite alternate;will-change:transform}
+  #overlay::after{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;
+    background:
+      linear-gradient(180deg,rgba(3,8,16,.18) 0%,rgba(3,8,16,.42) 60%,rgba(3,8,16,.78) 100%),
+      radial-gradient(circle at 50% 40%,transparent 0 22%,rgba(3,9,18,.18) 55%,rgba(3,9,18,.72) 100%),
+      linear-gradient(90deg,rgba(0,0,0,.24),transparent 22% 78%,rgba(0,0,0,.24))}
+  #overlay>*:not(.home-fx){position:relative;z-index:3}
+  .home-fx{position:fixed;inset:0;z-index:2;overflow:hidden;pointer-events:none}
+  #homeBattle{position:absolute;inset:0;width:100%;height:100%;display:block;filter:drop-shadow(0 10px 12px rgba(0,0,0,.48))}
+  .home-grid{position:absolute;inset:46% -15% -30%;opacity:.18;transform:perspective(520px) rotateX(63deg);
+    transform-origin:center top;background-image:linear-gradient(rgba(245,240,110,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(245,240,110,.5) 1px,transparent 1px);background-size:52px 52px;
+    mask-image:linear-gradient(to bottom,transparent,#000 28%,transparent 88%);animation:gridMarch 8s linear infinite}
+  .smoke{position:absolute;width:34vw;height:22vw;min-width:300px;min-height:190px;border-radius:50%;filter:blur(34px);opacity:.17;background:rgba(192,202,199,.7);will-change:transform}
+  .smoke.one{left:-10%;bottom:-6%;animation:smokeDrift 17s ease-in-out infinite alternate}
+  .smoke.two{right:-13%;top:20%;opacity:.11;animation:smokeDrift 22s ease-in-out -8s infinite alternate-reverse}
+  .ember{position:absolute;left:var(--left);bottom:-12px;width:3px;height:3px;background:#ffd65a;border-radius:50%;box-shadow:0 0 8px #ff6a2b;opacity:0;animation:emberRise var(--duration) linear var(--delay) infinite}
+  .hero-copy{text-align:center;display:flex;flex-direction:column;align-items:center;animation:heroEnter .55s cubic-bezier(.2,.8,.2,1) both}
+  .kicker{font-family:var(--mono);font-size:11px;font-weight:900;letter-spacing:.13em;color:#fff;text-shadow:0 2px 6px #000;margin-top:2px}
+  .kicker span{display:inline-block;background:#101c2a;border:2px solid #fff4;padding:5px 8px;margin:0 3px}
+  #overlay h1{font-size:clamp(38px,6vw,62px);font-weight:900;letter-spacing:-.03em;margin:9px 0 6px;
+    background:var(--primary);color:#fff;border:3px solid #000;box-shadow:7px 7px 0 #000;padding:7px 19px;text-transform:uppercase}
+  #overlay .tagline{font-family:var(--mono);font-size:13px;font-weight:800;margin:4px 0 16px;max-width:620px;text-align:center;line-height:1.5;color:#fff;background:rgba(5,12,23,.82);border:2px solid #000;box-shadow:3px 3px 0 #000;padding:7px 12px;text-shadow:0 1px 2px #000}
+  .hero-chips{display:flex;justify-content:center;gap:7px;flex-wrap:wrap;margin:-7px 0 16px}
+  .hero-chips span{font-size:11px;font-weight:900;color:#fff;background:rgba(7,17,31,.82);border:1px solid rgba(255,255,255,.42);padding:4px 8px;box-shadow:2px 2px 0 rgba(0,0,0,.8)}
+
+  .mode-tabs{display:flex;gap:0;margin-bottom:14px;border:3px solid #000;box-shadow:var(--shadow);background:rgba(255,255,255,.96);backdrop-filter:blur(8px);animation:heroEnter .5s .12s cubic-bezier(.2,.8,.2,1) both}
+  .mode-tab{pointer-events:auto;cursor:pointer;border:none;background:#fff;color:#000;font-family:var(--font);font-weight:800;font-size:15px;padding:12px 22px;min-width:140px}
+  .mode-tab + .mode-tab{border-left:3px solid #000}
+  .mode-tab.active{background:var(--primary);color:#fff}
+  .mode-tab:hover:not(.active){background:var(--secondary)}
+
+  .panel{background:rgba(255,255,255,.95);border:3px solid #000;box-shadow:7px 7px 0 rgba(0,0,0,.9);padding:20px 22px;width:min(500px,94vw);text-align:left;backdrop-filter:blur(10px);animation:heroEnter .5s .2s cubic-bezier(.2,.8,.2,1) both}
+  .panel h2{font-size:18px;font-weight:800;margin-bottom:6px}
+  .panel .hint{font-size:13px;color:var(--muted-fg);line-height:1.55;margin-bottom:12px;font-weight:500}
+  .panel label{display:block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;margin:12px 0 6px}
+  .panel input{width:100%;padding:12px 12px;border:3px solid #000;border-radius:var(--radius);background:#fff;color:#000;font-size:16px;font-family:var(--font);font-weight:600;outline:none;box-shadow:3px 3px 0 #000}
+  .panel input:focus{outline:3px solid var(--accent);outline-offset:1px}
+  .row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+  .btn{pointer-events:auto;cursor:pointer;font-family:var(--font);font-size:15px;font-weight:800;padding:12px 16px;border:3px solid #000;border-radius:var(--radius);background:var(--primary);color:#fff;box-shadow:var(--shadow);flex:1;min-width:120px;transition:transform .05s}
+  .btn:active{transform:translate(2px,2px);box-shadow:2px 2px 0 #000}
+  .btn.secondary{background:var(--secondary);color:#000}
+  .btn.accent{background:var(--accent);color:#fff}
+  .btn.ghost{background:#fff;color:#000}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+  .err{min-height:22px;margin-top:12px;font-size:13px;font-weight:700;color:var(--primary)}
+  .err.ok{color:#0a7a32}
+  #lobbyBox{display:none;margin-top:12px;padding-top:12px;border-top:3px solid #000}
+  #lobbyBox.show{display:block}
+  #roomTag{font-family:var(--mono);font-weight:700;font-size:22px;background:var(--secondary);border:2px solid #000;padding:2px 8px;box-shadow:2px 2px 0 #000}
+  .share{margin-top:10px;font-size:12px;line-height:1.55;font-family:var(--mono);word-break:break-all;white-space:pre-wrap;background:var(--muted);border:3px solid #000;padding:12px;max-height:160px;overflow:auto;box-shadow:var(--shadow)}
+  .plist-lobby{margin-top:10px;font-size:14px;line-height:1.8;font-weight:600}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:0;border:2px solid #000;margin-right:6px;vertical-align:middle}
+  .hidden{display:none!important}
+  .mode-panel{display:none}
+  .mode-panel.active{display:block}
+  #conn{position:fixed;bottom:10px;left:12px;font-size:11px;font-family:var(--mono);font-weight:700;background:#fff;border:2px solid #000;padding:4px 8px;box-shadow:2px 2px 0 #000;z-index:12;pointer-events:none}
+  .badge{display:inline-block;font-size:11px;font-weight:800;border:2px solid #000;padding:2px 6px;margin-left:6px;background:var(--secondary)}
+  #battleReport{display:none;margin:14px 0 4px;background:#fff7d0;border:3px solid #000;box-shadow:var(--shadow);padding:14px}
+  #battleReport.show{display:block}
+  #battleReport h3{font-size:22px;margin-bottom:5px}
+  #battleReport .report-meta{font-size:12px;font-weight:800;margin-bottom:10px}
+  #battleReport .report-ranking{display:grid;gap:6px;margin:10px 0}
+  #battleReport .report-player{background:#fff;border:2px solid #000;padding:7px 9px;font-size:13px;font-weight:800}
+  #battleReport .report-recap{font-size:13px;line-height:1.65;font-weight:700;border-top:2px solid #000;padding-top:9px}
+  @keyframes sceneDrift{
+    from{transform:translate3d(var(--scene-x),var(--scene-y),0) scale(1.07)}
+    to{transform:translate3d(var(--scene-x),var(--scene-y),0) scale(1.12)}
+  }
+  @keyframes heroEnter{from{opacity:0;transform:translateY(18px) scale(.985)}to{opacity:1;transform:none}}
+  @keyframes gridMarch{to{background-position:0 52px,52px 0}}
+  @keyframes smokeDrift{from{transform:translate3d(-4%,8%,0) scale(.85)}to{transform:translate3d(22%,-14%,0) scale(1.2)}}
+  @keyframes emberRise{0%,30%{opacity:0;transform:translate3d(0,0,0)}34%{opacity:.75}100%{opacity:0;transform:translate3d(var(--drift),-76vh,0)}}
+  @media (max-width:640px){
+    #overlay{padding-top:18px}
+    #overlay::before{background-position:center top}
+    #overlay h1{font-size:36px}
+    #overlay .tagline{font-size:11px;max-width:94vw}
+    .kicker{font-size:9px}.smoke{display:none}.home-grid{opacity:.1}
+    .mode-tab{min-width:0;padding:11px 16px}
+    .panel{padding:17px 16px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    #overlay::before,.home-grid,.smoke,.ember,.hero-copy,.mode-tabs,.panel{animation:none!important}
+    #overlay::before{transform:scale(1.07)}
+    #homeBattle{display:none}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" class="hidden">
+  <div id="topleft">
+    <div id="stats">房间 <b id="roomHud">----</b> · 第 <b id="gameHud">-</b>/<b id="gamesTotal">10</b> 局 · 第 <b id="roundHud">-</b>/<b id="roundsTotal">3</b> 把 · ⏱ <b id="timeHud">60</b>秒 · 本把 <b id="roundScoreHud">0</b> · 本局 <b id="gameScoreHud">0</b> · 总分 <b id="totalScoreHud">0</b></div>
+    <div id="hpbar"><div id="hpfill"></div></div>
+    <div id="buffs"></div>
+    <div id="plist"></div>
+  </div>
+  <canvas id="minimap" width="150" height="150"></canvas>
+  <div id="viewControls">
+    <button class="view-btn active" id="btnView25" type="button">二点五维</button>
+    <button class="view-btn" id="btnView2" type="button">二维俯瞰</button>
+    <select id="followSelect" aria-label="选择跟踪玩家"><option value="">自由视角</option></select>
+    <button class="view-btn" id="btnResetView" type="button">重置视角</button>
+  </div>
+  <div id="spectatorHint">方向键／前后左右键移动 · 滚轮缩放 · 可选择跟踪玩家</div>
+  <div id="matchActions"><button id="btnStopMatch" type="button">提前结束并生成战报</button></div>
+  <div id="banner"></div>
+</div>
+<div id="cross" class="hidden"></div>
+
+<div id="overlay">
+  <div class="home-fx" aria-hidden="true">
+    <canvas id="homeBattle"></canvas>
+    <div class="home-grid"></div>
+    <i class="smoke one"></i><i class="smoke two"></i>
+    <i class="ember" style="--left:8%;--duration:8.2s;--delay:-2s;--drift:24px"></i>
+    <i class="ember" style="--left:19%;--duration:10.4s;--delay:-7s;--drift:-18px"></i>
+    <i class="ember" style="--left:36%;--duration:9.1s;--delay:-4s;--drift:32px"></i>
+    <i class="ember" style="--left:61%;--duration:11.2s;--delay:-8s;--drift:-28px"></i>
+    <i class="ember" style="--left:77%;--duration:8.8s;--delay:-5s;--drift:20px"></i>
+    <i class="ember" style="--left:91%;--duration:10.8s;--delay:-1s;--drift:-34px"></i>
+  </div>
+  <div class="hero-copy">
+    <p class="kicker"><span>四人实时竞技场</span><span>网页即开即战</span></p>
+    <h1>坦克混战</h1>
+    <p class="tagline">3 命 · 命中 +1 分 · 击杀吞分 · 10 局 × 每局 3 把 × 60 秒 · 总积分排名 · 无系统机器人</p>
+    <div class="hero-chips"><span>人类联机</span><span>Agent 自主对战</span><span>全局观战</span></div>
+  </div>
+
+  <div class="mode-tabs">
+    <button type="button" class="mode-tab active" id="tabHuman" data-mode="human">人类测试</button>
+    <button type="button" class="mode-tab" id="tabAgent" data-mode="agent">Agent 对战</button>
+  </div>
+
+  <div class="panel">
+    <!-- 人类模式 -->
+    <div class="mode-panel active" id="panelHuman">
+      <h2>人类测试 <span class="badge">手动开局</span></h2>
+      <p class="hint">WASD 移动坦克；鼠标只控制炮台；Q/E 环绕镜头；滚轮调整上下视角；左键或空格开火。</p>
+      <label>昵称</label>
+      <input id="nameIn" maxlength="16" placeholder="你的名字">
+      <label>房间码（加入别人的房时填）</label>
+      <input id="codeIn" maxlength="4" placeholder="例如 AB3K" style="text-transform:uppercase;letter-spacing:2px">
+      <div class="row">
+        <button class="btn" id="btnCreate" type="button">创建房间</button>
+        <button class="btn secondary" id="btnJoin" type="button">加入房间</button>
+      </div>
+    </div>
+
+    <!-- Agent 模式 -->
+    <div class="mode-panel" id="panelAgent">
+      <h2>Agent 对战 <span class="badge">自动观战</span></h2>
+      <p class="hint">创建房间 → 复制文案发群给 Agent → 满 2 人自动开战 → 自动弹出全局俯瞰观战画面。人不占选手位。</p>
+      <label>你的备注名（可选）</label>
+      <input id="agentHostName" maxlength="16" placeholder="例如：第3组房主">
+      <div class="row">
+        <button class="btn accent" id="btnAgentLobby" type="button">创建 Agent 房间</button>
+      </div>
+    </div>
+
+    <div class="err" id="err"></div>
+    <p class="hint"><a href="/network-check.html" target="_blank" rel="noopener">这台电脑无法进入？打开网络检测</a></p>
+
+    <div id="lobbyBox">
+      <div>房间号 <span id="roomTag">----</span> <span id="modeBadge" class="badge"></span></div>
+      <div class="share" id="shareBox"></div>
+      <div class="row">
+        <button class="btn" id="btnCopyPack" type="button" style="display:none">复制给群 / Agent</button>
+        <button class="btn secondary" id="btnOpenSpectate" type="button" style="display:none">再次打开观战</button>
+      </div>
+      <div class="plist-lobby" id="lobbyList"></div>
+      <div id="battleReport"></div>
+      <div class="row">
+        <button class="btn accent" id="btnStart" type="button" disabled>开始混战</button>
+        <button class="btn ghost" id="btnRematch" type="button" style="display:none">再来一场</button>
+      </div>
+      <p class="hint" id="lobbyHint" style="margin-top:12px;margin-bottom:0"></p>
+    </div>
+  </div>
+</div>
+<div id="conn">未连接</div>
+
+<script src="/vendor/three/three.min.js"></script>
+<script>
+'use strict';
+if (typeof THREE === 'undefined') {
+  document.getElementById('err').textContent = 'three.js 加载失败，请检查网络后刷新';
+  throw new Error('THREE missing');
+}
+
+// ---------- DOM ----------
+const canvas = document.getElementById('c');
+const overlay = document.getElementById('overlay');
+const hud = document.getElementById('hud');
+const cross = document.getElementById('cross');
+const errEl = document.getElementById('err');
+const lobbyBox = document.getElementById('lobbyBox');
+const lobbyList = document.getElementById('lobbyList');
+const roomTag = document.getElementById('roomTag');
+const btnStart = document.getElementById('btnStart');
+const btnRematch = document.getElementById('btnRematch');
+const btnStopMatch = document.getElementById('btnStopMatch');
+const followSelect = document.getElementById('followSelect');
+const battleReport = document.getElementById('battleReport');
+const bannerEl = document.getElementById('banner');
+const connEl = document.getElementById('conn');
+const nameIn = document.getElementById('nameIn');
+const codeIn = document.getElementById('codeIn');
+nameIn.value = localStorage.getItem('tank4p_name') || ('坦克' + Math.floor(Math.random()*90+10));
+
+// 首页只做轻量视差：背景缓慢移动，界面本身保持稳定，避免闪屏和频繁重排。
+const reduceHomeMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+let homeParallaxFrame = 0;
+overlay.addEventListener('pointermove', (event) => {
+  if (reduceHomeMotion.matches || homeParallaxFrame) return;
+  homeParallaxFrame = requestAnimationFrame(() => {
+    const x = (event.clientX / innerWidth - .5) * -14;
+    const y = (event.clientY / innerHeight - .5) * -10;
+    overlay.style.setProperty('--scene-x', x.toFixed(1) + 'px');
+    overlay.style.setProperty('--scene-y', y.toFixed(1) + 'px');
+    homeParallaxFrame = 0;
+  });
+}, {passive:true});
+overlay.addEventListener('pointerleave', () => {
+  overlay.style.setProperty('--scene-x', '0px');
+  overlay.style.setProperty('--scene-y', '0px');
+}, {passive:true});
+
+// 首页战斗演出：真实的“坦克驶入 → 瞄准 → 后坐 → 炮弹飞行 → 命中爆炸”时间线。
+const homeBattleCanvas = document.getElementById('homeBattle');
+const homeBattleCtx = homeBattleCanvas.getContext('2d', {alpha:true});
+let homeBattleWidth = 0;
+let homeBattleHeight = 0;
+let homeBattleDpr = 1;
+const homeBattleStartedAt = performance.now();
+function resizeHomeBattle(){
+  homeBattleDpr = Math.min(devicePixelRatio || 1, 1.5);
+  homeBattleWidth = innerWidth;
+  homeBattleHeight = innerHeight;
+  homeBattleCanvas.width = Math.round(homeBattleWidth * homeBattleDpr);
+  homeBattleCanvas.height = Math.round(homeBattleHeight * homeBattleDpr);
+  homeBattleCtx.setTransform(homeBattleDpr,0,0,homeBattleDpr,0,0);
+}
+resizeHomeBattle();
+addEventListener('resize', resizeHomeBattle, {passive:true});
+
+const homeClamp = (v,a=0,b=1) => Math.max(a,Math.min(b,v));
+const homeMix = (a,b,t) => a+(b-a)*t;
+const homeEase = t => 1-Math.pow(1-homeClamp(t),3);
+function homeRecoil(t, shotAt){
+  const d=t-shotAt;
+  if(d<0 || d>.34) return 0;
+  return d<.07 ? d/.07 : 1-(d-.07)/.27;
+}
+function drawHomeTank(x,y,angle,color,scale,t,recoil){
+  const ctx=homeBattleCtx;
+  ctx.save();
+  ctx.translate(x-Math.cos(angle)*recoil*9*scale,y-Math.sin(angle)*recoil*9*scale);
+  ctx.rotate(angle);
+  ctx.scale(scale,scale);
+  ctx.globalAlpha*=.98;
+  ctx.fillStyle='rgba(0,0,0,.45)';
+  ctx.beginPath();ctx.ellipse(-4,10,54,29,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#18212a';
+  ctx.fillRect(-46,-29,78,13);ctx.fillRect(-46,16,78,13);
+  ctx.fillStyle='#77808a';
+  for(let row of [-25,20]){
+    for(let i=-42;i<31;i+=13){
+      const offset=(i+(t*34)%13);
+      ctx.fillRect(offset,row,8,5);
+    }
+  }
+  const body=ctx.createLinearGradient(-38,-20,35,22);
+  body.addColorStop(0,color.light);body.addColorStop(.55,color.main);body.addColorStop(1,color.dark);
+  ctx.fillStyle=body;ctx.strokeStyle='#0c1218';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(-39,-20);ctx.lineTo(27,-23);ctx.lineTo(42,-10);ctx.lineTo(38,14);ctx.lineTo(22,23);ctx.lineTo(-39,19);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.fillStyle=color.dark;ctx.fillRect(-30,-13,11,26);ctx.fillRect(-14,-15,7,30);
+  ctx.fillStyle=color.light;ctx.strokeStyle='#0c1218';ctx.lineWidth=3;
+  ctx.beginPath();ctx.arc(9,0,21,0,Math.PI*2);ctx.fill();ctx.stroke();
+  ctx.fillStyle=color.main;ctx.beginPath();ctx.arc(12,-2,12,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#26313a';ctx.strokeStyle='#0c1218';ctx.lineWidth=3;
+  ctx.fillRect(20,-5,52-recoil*5,10);ctx.strokeRect(20,-5,52-recoil*5,10);
+  ctx.fillStyle='#a9b2b9';ctx.fillRect(63-recoil*5,-3,13,6);
+  ctx.restore();
+  return {x:x+Math.cos(angle)*76*scale,y:y+Math.sin(angle)*76*scale,angle};
+}
+function drawHomeFlash(muzzle,life,scale){
+  if(life<0 || life>1) return;
+  const ctx=homeBattleCtx;
+  ctx.save();ctx.translate(muzzle.x,muzzle.y);ctx.rotate(muzzle.angle);ctx.scale(scale,scale);
+  ctx.globalCompositeOperation='lighter';ctx.globalAlpha*=1-life;
+  const glow=ctx.createRadialGradient(0,0,1,0,0,38);glow.addColorStop(0,'#fff');glow.addColorStop(.22,'#fff19a');glow.addColorStop(.55,'#ff7b24');glow.addColorStop(1,'rgba(255,72,0,0)');
+  ctx.fillStyle=glow;ctx.beginPath();ctx.arc(0,0,38,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fff4a8';ctx.beginPath();ctx.moveTo(-5,-6);ctx.lineTo(42,0);ctx.lineTo(-5,7);ctx.lineTo(9,0);ctx.closePath();ctx.fill();ctx.restore();
+}
+function drawHomeShell(from,to,p){
+  const ctx=homeBattleCtx;
+  const q=homeEase(p),x=homeMix(from.x,to.x,q),y=homeMix(from.y,to.y,q);
+  const dx=to.x-from.x,dy=to.y-from.y,len=Math.hypot(dx,dy)||1,ux=dx/len,uy=dy/len;
+  const trail=ctx.createLinearGradient(x-ux*55,y-uy*55,x,y);trail.addColorStop(0,'rgba(255,95,20,0)');trail.addColorStop(.62,'#ff7826');trail.addColorStop(1,'#fffbd0');
+  ctx.save();ctx.globalCompositeOperation='lighter';ctx.strokeStyle=trail;ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(x-ux*55,y-uy*55);ctx.lineTo(x,y);ctx.stroke();
+  ctx.fillStyle='#fff';ctx.shadowColor='#ff9c36';ctx.shadowBlur=14;ctx.beginPath();ctx.arc(x,y,4.5,0,Math.PI*2);ctx.fill();ctx.restore();
+}
+function drawHomeExplosion(x,y,age,scale=1){
+  if(age<0 || age>1) return;
+  const ctx=homeBattleCtx,r=(18+age*64)*scale,fade=1-age;
+  ctx.save();ctx.translate(x,y);ctx.globalCompositeOperation='lighter';ctx.globalAlpha*=fade;
+  const glow=ctx.createRadialGradient(0,0,2,0,0,r);glow.addColorStop(0,'#fff');glow.addColorStop(.2,'#ffe36e');glow.addColorStop(.52,'#ff6423');glow.addColorStop(1,'rgba(180,25,0,0)');ctx.fillStyle=glow;ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#ffd36a';ctx.lineWidth=Math.max(1,4*(1-age));
+  for(let i=0;i<10;i++){const a=i*.628+age*.3,l=(24+((i*17)%29)+age*55)*scale;ctx.beginPath();ctx.moveTo(Math.cos(a)*r*.25,Math.sin(a)*r*.25);ctx.lineTo(Math.cos(a)*l,Math.sin(a)*l);ctx.stroke()}
+  ctx.restore();
+  ctx.save();ctx.globalAlpha*=fade*.35;ctx.strokeStyle='#f6e6be';ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,r*1.08,0,Math.PI*2);ctx.stroke();ctx.restore();
+}
+function renderHomeBattle(now){
+  requestAnimationFrame(renderHomeBattle);
+  if(overlay.classList.contains('hidden') || reduceHomeMotion.matches) return;
+  const ctx=homeBattleCtx,w=homeBattleWidth,h=homeBattleHeight;
+  ctx.clearRect(0,0,w,h);
+  const duration=10.8,t=((now-homeBattleStartedAt)/1000)%duration;
+  const compact=w<700,scale=compact?.58:Math.min(1.18,Math.max(.82,w/1250));
+  const enter=homeEase(t/1.45),fade=t>10?1-(t-10)/.8:1;
+  ctx.globalAlpha=homeClamp(fade);
+  const edge=compact?52:Math.max(104,w*.12);
+  let leftX=homeMix(-110,edge,enter),rightX=homeMix(w+110,w-edge,enter);
+  const reposition=homeEase((t-5.7)/1.35);
+  const baseY=compact?h*.29:h*.58;
+  const leftY=baseY-homeMix(0,compact?18:46,reposition);
+  const rightY=baseY+homeMix(0,compact?18:46,reposition);
+  const leftAngle=Math.atan2(rightY-leftY,rightX-leftX);
+  const rightAngle=leftAngle+Math.PI;
+  const leftRecoil=Math.max(homeRecoil(t,2.15),homeRecoil(t,7.48));
+  const rightRecoil=Math.max(homeRecoil(t,4.08),homeRecoil(t,7.48));
+  const leftMuzzle=drawHomeTank(leftX,leftY,leftAngle,{light:'#ff6a55',main:'#d93426',dark:'#8d1d18'},scale,t,leftRecoil);
+  const rightMuzzle=drawHomeTank(rightX,rightY,rightAngle,{light:'#ffe65c',main:'#dda919',dark:'#8d650d'},scale,t,rightRecoil);
+  const leftTarget={x:rightX-Math.cos(leftAngle)*22*scale,y:rightY-Math.sin(leftAngle)*22*scale};
+  const rightTarget={x:leftX+Math.cos(leftAngle)*22*scale,y:leftY+Math.sin(leftAngle)*22*scale};
+  const shots=[
+    {at:2.15,dur:.72,from:leftMuzzle,to:leftTarget,hit:leftTarget},
+    {at:4.08,dur:.78,from:rightMuzzle,to:rightTarget,hit:rightTarget}
+  ];
+  for(const shot of shots){
+    drawHomeFlash(shot.from,(t-shot.at)/.13,scale);
+    if(t>=shot.at&&t<=shot.at+shot.dur) drawHomeShell(shot.from,shot.to,(t-shot.at)/shot.dur);
+    drawHomeExplosion(shot.hit.x,shot.hit.y,(t-shot.at-shot.dur)/.72,scale);
+  }
+  const clash={x:w*.5,y:(leftY+rightY)*.5};
+  drawHomeFlash(leftMuzzle,(t-7.48)/.13,scale);drawHomeFlash(rightMuzzle,(t-7.48)/.13,scale);
+  if(t>=7.48&&t<=8.13){drawHomeShell(leftMuzzle,clash,(t-7.48)/.65);drawHomeShell(rightMuzzle,clash,(t-7.48)/.65)}
+  drawHomeExplosion(clash.x,clash.y,(t-8.13)/1.05,scale*1.3);
+  ctx.globalAlpha=1;
+}
+requestAnimationFrame(renderHomeBattle);
+
+// ---------- Audio (simple WebAudio beeps, same spirit as original) ----------
+let muted = false;
+const AC = window.AudioContext || window.webkitAudioContext;
+let actx = null;
+function ensureAudio(){ if(!actx && AC) actx = new AC(); if(actx && actx.state==='suspended') actx.resume(); }
+function beep(freq, dur, type, vol){
+  if(muted || !actx) return;
+  const o = actx.createOscillator();
+  const g = actx.createGain();
+  o.type = type || 'square';
+  o.frequency.value = freq;
+  g.gain.value = vol || 0.04;
+  o.connect(g); g.connect(actx.destination);
+  o.start();
+  g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
+  o.stop(actx.currentTime + dur);
+}
+const Sound = {
+  shoot(){ ensureAudio(); beep(520,.06,'square',.03); },
+  hit(){ ensureAudio(); beep(180,.08,'triangle',.04); },
+  phit(){ ensureAudio(); beep(120,.12,'sawtooth',.05); },
+  boom(){ ensureAudio(); beep(80,.25,'sawtooth',.06); beep(60,.3,'triangle',.05); },
+  power(){ ensureAudio(); beep(660,.1,'sine',.04); beep(880,.12,'sine',.03); },
+  wave(){ ensureAudio(); beep(440,.15,'square',.04); beep(660,.2,'square',.03); },
+};
+
+// ---------- Three.js scene ----------
+const renderer = new THREE.WebGLRenderer({canvas, antialias:false, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setSize(innerWidth, innerHeight);
+// 阴影降配：联机优先流畅
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.BasicShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xb9dcff);
+scene.fog = new THREE.Fog(0xb9dcff, 115, 230);
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .1, 400);
+const camera2D = new THREE.OrthographicCamera(-70, 70, 70, -70, .1, 400);
+camera2D.up.set(0, 0, -1);
+let activeCamera = camera;
+function resizeOrthoCamera(zoom=1){
+  const aspect = innerWidth/innerHeight;
+  const base = 62/Math.max(.55,Math.min(2.5,zoom));
+  const halfH = aspect >= 1 ? base : base/aspect;
+  const halfW = aspect >= 1 ? base*aspect : base;
+  camera2D.left = -halfW;
+  camera2D.right = halfW;
+  camera2D.top = halfH;
+  camera2D.bottom = -halfH;
+  camera2D.updateProjectionMatrix();
+}
+resizeOrthoCamera();
+camera.position.set(0, 30, 18);
+const clock = new THREE.Clock();
+
+scene.add(new THREE.HemisphereLight(0xeaf7ff, 0x71824d, 1.05));
+const sun = new THREE.DirectionalLight(0xfff6df, 1.35);
+sun.position.set(30, 60, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.set(512, 512);
+sun.shadow.camera.left = -70; sun.shadow.camera.right = 70;
+sun.shadow.camera.top = 70; sun.shadow.camera.bottom = -70;
+sun.shadow.camera.far = 160;
+scene.add(sun);
+const flash = new THREE.PointLight(0xffaa33, 0, 32);
+scene.add(flash);
+
+let A = 55;
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(A*2+60, A*2+60),
+  new THREE.MeshStandardMaterial({color:0x78935b, roughness:.95})
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+const grid = new THREE.GridHelper(A*2, 22, 0xffffff, 0x526b42);
+grid.position.y = .02;
+grid.material.transparent = true;
+grid.material.opacity = .32;
+scene.add(grid);
+
+const wallMat = new THREE.MeshStandardMaterial({color:0xc8b48d, roughness:.82, metalness:.05});
+function rebuildWalls(a){
+  // remove old walls/obstacles later via groups
+}
+[[0,-A,A*2+2,1.6],[0,A,A*2+2,1.6],[-A,0,1.6,A*2+2],[A,0,1.6,A*2+2]].forEach(([x,z,w,d])=>{
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 3, d), wallMat);
+  m.position.set(x, 1.5, z);
+  m.castShadow = m.receiveShadow = true;
+  scene.add(m);
+});
+
+const obstacleGroup = new THREE.Group();
+scene.add(obstacleGroup);
+function setObstacles(list){
+  while(obstacleGroup.children.length){
+    const c = obstacleGroup.children[0];
+    obstacleGroup.remove(c);
+    c.geometry && c.geometry.dispose();
+  }
+  const boxGeo = new THREE.BoxGeometry(1,1,1);
+  const mats = [0x8e9b78, 0xaa8966, 0x718d70].map(c=>new THREE.MeshStandardMaterial({color:c, roughness:.9}));
+  list.forEach((o,i)=>{
+    const m = new THREE.Mesh(boxGeo, mats[i%3]);
+    m.scale.set(o.hw*2, o.h, o.hd*2);
+    m.position.set(o.x, o.h/2, o.z);
+    m.castShadow = m.receiveShadow = true;
+    obstacleGroup.add(m);
+  });
+}
+
+function makeTank(bodyColor, scale=1){
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(2.2*scale, .9*scale, 3.0*scale),
+    new THREE.MeshStandardMaterial({color:bodyColor, roughness:.55, metalness:.25})
+  );
+  body.position.y = .55*scale;
+  body.castShadow = true;
+  g.add(body);
+  const treadL = new THREE.Mesh(
+    new THREE.BoxGeometry(.35*scale, .55*scale, 3.1*scale),
+    new THREE.MeshStandardMaterial({color:0x1a1f28, roughness:.9})
+  );
+  treadL.position.set(-1.15*scale, .35*scale, 0);
+  const treadR = treadL.clone(); treadR.position.x = 1.15*scale;
+  g.add(treadL); g.add(treadR);
+  const turret = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.85*scale, 1.0*scale, .55*scale, 12),
+    new THREE.MeshStandardMaterial({color:bodyColor, roughness:.5, metalness:.3})
+  );
+  turret.position.y = 1.2*scale;
+  turret.castShadow = true;
+  g.add(turret);
+  const barrel = new THREE.Mesh(
+    new THREE.CylinderGeometry(.12*scale, .16*scale, 2.2*scale, 8),
+    new THREE.MeshStandardMaterial({color:0x222833, roughness:.4, metalness:.6})
+  );
+  barrel.rotation.x = Math.PI/2;
+  barrel.position.set(0, 1.25*scale, 1.3*scale);
+  const turretPivot = new THREE.Group();
+  turretPivot.position.y = 0;
+  // re-parent turret bits
+  g.remove(turret); g.remove(barrel);
+  turretPivot.add(turret); turretPivot.add(barrel);
+  g.add(turretPivot);
+  const muzzle = new THREE.Object3D();
+  muzzle.position.set(0, 1.25*scale, 2.4*scale);
+  turretPivot.add(muzzle);
+  const shield = new THREE.Mesh(
+    new THREE.SphereGeometry(2.2*scale, 16, 12),
+    new THREE.MeshBasicMaterial({color:0x44aaff, transparent:true, opacity:.15, wireframe:true})
+  );
+  shield.visible = false;
+  g.add(shield);
+  // nameplate later
+  return { group:g, turret:turretPivot, muzzle, shield, body };
+}
+
+// particles
+const V1 = new THREE.Vector3(), V2 = new THREE.Vector3();
+const particles = {
+  pos: new Float32Array(256*3),
+  col: new Float32Array(256*3),
+  vel: [],
+  life: [],
+  idx: 0,
+  points: null,
+  init(){
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this.pos,3));
+    geo.setAttribute('color', new THREE.BufferAttribute(this.col,3));
+    const mat = new THREE.PointsMaterial({size:.55, vertexColors:true, blending:THREE.AdditiveBlending, transparent:true, depthWrite:false});
+    this.points = new THREE.Points(geo, mat);
+    scene.add(this.points);
+    for(let i=0;i<256;i++){ this.vel.push(new THREE.Vector3()); this.life.push(0); }
+  },
+  spawn(p, opt={}){
+    const n = opt.count||12;
+    for(let k=0;k<n;k++){
+      const i = this.idx++ % 256;
+      this.pos[i*3]=p.x; this.pos[i*3+1]=p.y||1; this.pos[i*3+2]=p.z;
+      const c1=opt.c1||[1,.8,.3], c2=opt.c2||[1,.3,0];
+      const t=Math.random();
+      this.col[i*3]=c1[0]*(1-t)+c2[0]*t;
+      this.col[i*3+1]=c1[1]*(1-t)+c2[1]*t;
+      this.col[i*3+2]=c1[2]*(1-t)+c2[2]*t;
+      const sp=opt.speed||6;
+      this.vel[i].set((Math.random()-.5)*sp, Math.random()*(opt.up||4), (Math.random()-.5)*sp);
+      this.life[i]=opt.life||.5;
+    }
+    this.points.geometry.attributes.position.needsUpdate = true;
+    this.points.geometry.attributes.color.needsUpdate = true;
+  },
+  update(dt){
+    for(let i=0;i<256;i++){
+      if(this.life[i]<=0) continue;
+      this.life[i]-=dt;
+      this.pos[i*3]+=this.vel[i].x*dt;
+      this.pos[i*3+1]+=this.vel[i].y*dt;
+      this.pos[i*3+2]+=this.vel[i].z*dt;
+      this.vel[i].y -= (8)*dt;
+      if(this.life[i]<=0) this.pos[i*3+1]=-999;
+    }
+    this.points.geometry.attributes.position.needsUpdate = true;
+  }
+};
+particles.init();
+
+const impactRings = [];
+function spawnImpactRing(x,z,color=0xffffff,crash=false){
+  const material = new THREE.MeshBasicMaterial({color,transparent:true,opacity:.95,side:THREE.DoubleSide,depthWrite:false});
+  const ring = new THREE.Mesh(new THREE.RingGeometry(crash ? .45 : .28, crash ? .8 : .55, 24), material);
+  ring.rotation.x = -Math.PI/2;
+  ring.position.set(x, crash ? .2 : 1.35, z);
+  ring.userData.life = crash ? .8 : .38;
+  ring.userData.maxLife = ring.userData.life;
+  ring.userData.speed = crash ? 7 : 4;
+  scene.add(ring);
+  impactRings.push(ring);
+}
+function updateImpactRings(dt){
+  for(let i=impactRings.length-1;i>=0;i--){
+    const ring=impactRings[i];
+    ring.userData.life-=dt;
+    ring.scale.addScalar(ring.userData.speed*dt);
+    ring.material.opacity=Math.max(0,ring.userData.life/ring.userData.maxLife);
+    if(ring.userData.life<=0){
+      scene.remove(ring); ring.geometry.dispose(); ring.material.dispose(); impactRings.splice(i,1);
+    }
+  }
+}
+
+// ---------- net / game state ----------
+let ws = null;
+let myId = null;
+let myToken = null;
+let roomCode = null;
+let hostId = null;
+let isSpectator = false;
+let shareTextCache = '';
+let spectateUrlCache = '';
+let hostKey = null; // Agent 空房开局密钥
+let uiMode = 'human'; // human | agent
+let agentPollTimer = null;
+let spectateWin = null; // 用户手势预开的窗口，开战再跳转观战
+let spectateNavigated = false;
+let phase = 'menu'; // menu | lobby | countdown | playing | finished
+let lastState = null;
+let lastPhaseForAuto = '';
+const tankMeshes = new Map(); // id -> tank visual
+const bulletMeshes = new Map();
+const powerMeshes = new Map();
+let obstaclesReady = false;
+let lastHudAt = 0;
+let lastLobbyHtml = '';
+let lastPlayerHtml = '';
+let rttMs = 0;
+let pingTimer = 0;
+let spectatorView = '2.5d';
+let spectatorFocusX = 0;
+let spectatorFocusZ = 0;
+let spectatorZoom = 1;
+let spectatorFollowId = '';
+let cameraOrbitYaw = 0;
+let cameraHeight = 18;
+
+function setSpectatorView(mode){
+  spectatorView = mode === '2d' ? '2d' : '2.5d';
+  document.getElementById('btnView25').classList.toggle('active', spectatorView === '2.5d');
+  document.getElementById('btnView2').classList.toggle('active', spectatorView === '2d');
+}
+document.getElementById('btnView25').onclick = ()=>setSpectatorView('2.5d');
+document.getElementById('btnView2').onclick = ()=>setSpectatorView('2d');
+document.getElementById('btnResetView').onclick = ()=>{
+  spectatorFocusX = 0;
+  spectatorFocusZ = 0;
+  spectatorZoom = 1;
+  spectatorFollowId = '';
+  followSelect.value = '';
+};
+followSelect.onchange = ()=>{ spectatorFollowId = followSelect.value || ''; };
+
+function updateFollowOptions(players){
+  const current = spectatorFollowId;
+  const options = ['<option value="">自由视角</option>'].concat(players.map(p=>
+    `<option value="${p.id}">跟踪：${escapeHtml(p.name)}</option>`
+  ));
+  const html = options.join('');
+  if(followSelect.innerHTML !== html) followSelect.innerHTML = html;
+  if(players.some(p=>p.id===current)) followSelect.value = current;
+  else { spectatorFollowId = ''; followSelect.value = ''; }
+}
+
+// 本地预测 + 远端插值（缓解 Cloudflare 隧道高延迟）
+const PLAYER_SPEED = 16;
+const pred = { x:0, z:0, yaw:0, turretYaw:0, active:false };
+// id -> { from, to, fromT, toT }
+const remoteBuf = new Map();
+const FIXED_OBSTACLES = [
+  [0,0,3.2,3.2,2.4],[-18,-12,2.4,2.8,2.2],[16,-18,2.6,2.2,2.8],[-22,14,2.2,2.6,2.0],
+  [20,16,2.8,2.4,2.6],[-8,22,2.0,2.4,1.9],[10,-26,2.4,2.0,2.2],[-28,-4,2.2,3.0,2.5],
+  [26,6,2.6,2.2,2.1],[4,12,2.0,2.0,3.0],[-12,-24,2.8,2.2,2.3],[14,26,2.2,2.6,2.0],
+  [-30,28,2.4,2.0,2.4],[30,-28,2.0,2.4,2.2],[-4,-8,1.8,2.2,2.6],[8,4,2.2,1.8,2.1],
+].map(([x,z,hw,hd,h])=>({x,z,hw,hd,h}));
+
+function localCollide(p, r){
+  p.x = Math.max(-A+r, Math.min(A-r, p.x));
+  p.z = Math.max(-A+r, Math.min(A-r, p.z));
+  for(const o of FIXED_OBSTACLES){
+    const dx=p.x-o.x, dz=p.z-o.z;
+    const gapX=o.hw+r, gapZ=o.hd+r;
+    if(Math.abs(dx)<gapX && Math.abs(dz)<gapZ){
+      const penX=gapX-Math.abs(dx), penZ=gapZ-Math.abs(dz);
+      if(penX<penZ) p.x=o.x+(dx>=0?1:-1)*gapX;
+      else p.z=o.z+(dz>=0?1:-1)*gapZ;
+    }
+  }
+  return p;
+}
+function normAng(a){ while(a>Math.PI)a-=Math.PI*2; while(a<-Math.PI)a+=Math.PI*2; return a; }
+
+const keys = {};
+const mouse = {nx:0, ny:0, down:false};
+let kbdAim = false;
+const aimVec = {x:0, z:1};
+const aimPoint = new THREE.Vector3();
+const raycaster = new THREE.Raycaster();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
+
+function wsURL(){
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${location.host}`;
+}
+function absUrl(value){
+  return new URL(value, location.origin).href;
+}
+function connect(onOpen){
+  if(ws && ws.readyState<=1){ onOpen && onOpen(); return; }
+  ws = new WebSocket(wsURL());
+  connEl.textContent = '连接中…';
+  ws.onopen = ()=>{
+    connEl.textContent = '已连接 ' + location.host;
+    onOpen && onOpen();
+  };
+  ws.onclose = ()=>{
+    connEl.textContent = '连接断开';
+    mouse.down = false;
+    pred.active = false;
+    for(const k of Object.keys(keyDown)) keyDown[k] = false;
+    syncBullets([]);
+    if(phase !== 'menu'){
+      phase = 'disconnected';
+      banner('连接已断开');
+      setErr('与服务器断开，画面已暂停，请刷新后重新进入');
+    }
+  };
+  ws.onerror = ()=> setErr('无法连接服务器（确认已 npm start）');
+  ws.onmessage = (ev)=>{
+    let msg; try{ msg = JSON.parse(ev.data); }catch{ return; }
+    if(msg.type==='error'){ setErr(msg.err); return; }
+    if(msg.type==='pong' && msg.t){ rttMs = Math.max(0, Date.now()-msg.t); return; }
+    if(msg.type==='joined'){
+      myId = msg.id; roomCode = msg.code; hostId = msg.hostId;
+      myToken = msg.token || null;
+      isSpectator = msg.role === 'spectator' || msg.kind === 'spectator';
+      if(msg.shareText) shareTextCache = msg.shareText;
+      if(msg.spectateUrl) spectateUrlCache = absUrl(msg.spectateUrl);
+      roomTag.textContent = roomCode;
+      document.getElementById('roomHud').textContent = roomCode + (isSpectator ? ' · 观战' : '');
+      lobbyBox.classList.add('show');
+      setErr(isSpectator ? '观战模式：开战后退下大厅即可看 Agent 操作' : '');
+      phase = 'lobby';
+      pred.active = false;
+      if(msg.obstacles){ setObstacles(msg.obstacles); obstaclesReady = true; }
+      else if(!obstaclesReady){ setObstacles(FIXED_OBSTACLES); obstaclesReady = true; }
+      if(msg.arena) A = msg.arena;
+      updateShareUI();
+      if(isSpectator){
+        // 观战可直接进场景等开局
+        const tagline = document.querySelector('.tagline');
+        if(tagline) tagline.textContent = '全局观战中 · 不占用选手位 · 可切换二点五维与二维俯瞰';
+      }
+      return;
+    }
+    if(msg.type==='state') onState(msg);
+  };
+}
+function send(obj){ if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); }
+function setErr(t){
+  errEl.textContent = t||'';
+  errEl.classList.toggle('ok', !!(t && (t.indexOf('✅')>=0 || t.indexOf('已复制')>=0)));
+}
+function escapeHtml(value){
+  return String(value == null ? '' : value).replace(/[&<>"']/g, c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[c]);
+}
+
+function formatDuration(seconds){
+  const total = Math.max(0, Number(seconds)||0);
+  const m = Math.floor(total/60);
+  const s = total%60;
+  return `${m}分${s}秒`;
+}
+
+function renderBattleReport(result){
+  const report = result && result.report;
+  if(!report){ battleReport.classList.remove('show'); battleReport.innerHTML=''; return; }
+  const players = (report.playerReports||[]).map((p,i)=>
+    `<div class="report-player">${i+1}. ${escapeHtml(p.name)} · ${p.totalScore}分 · ${p.gameWins}局胜 · ${p.roundWins}把胜 · ${p.kills}击杀/${p.deaths}阵亡</div>`
+  ).join('');
+  const progress = report.endedEarly
+    ? `提前结束 · 已完成 ${report.completedGames}/${report.scheduledGames} 局、${report.completedRounds}/${report.scheduledRounds} 把`
+    : `完整赛程 · ${report.completedGames} 局、${report.completedRounds} 把`;
+  battleReport.innerHTML = `
+    <h3>${escapeHtml(report.headline)}</h3>
+    <div class="report-meta">${progress} · 用时 ${formatDuration(report.durationSec)} · 对撞 ${report.collisionCount||0} 次</div>
+    <div class="report-ranking">${players}</div>
+    <div class="report-recap">${escapeHtml(report.recap||result.summary||'')}</div>`;
+  battleReport.classList.add('show');
+}
+
+function onState(s){
+  const now = performance.now();
+  lastState = s;
+  hostId = s.hostId;
+  const prevPhase = phase;
+  phase = s.phase;
+  if(isSpectator) updateFollowOptions(s.players||[]);
+  if(!obstaclesReady){
+    setObstacles(s.obstacles || FIXED_OBSTACLES);
+    obstaclesReady = true;
+  }
+
+  // 远端插值缓冲 + 本地预测校正
+  for(const p of s.players){
+    if(p.id === myId){
+      if(!pred.active || prevPhase !== 'playing' && s.phase === 'playing' || s.phase === 'countdown'){
+        pred.x = p.x; pred.z = p.z; pred.yaw = p.yaw; pred.turretYaw = p.turretYaw; pred.active = true;
+      } else {
+        // 软校正，避免瞬移
+        const dx = p.x - pred.x, dz = p.z - pred.z;
+        const dist = Math.hypot(dx, dz);
+        if(dist > 4){ pred.x = p.x; pred.z = p.z; }
+        else { pred.x += dx * 0.25; pred.z += dz * 0.25; }
+        pred.yaw += normAng(p.yaw - pred.yaw) * 0.35;
+        pred.turretYaw += normAng(p.turretYaw - pred.turretYaw) * 0.45;
+      }
+    } else {
+      let b = remoteBuf.get(p.id);
+      if(!b){
+        b = { x:p.x, z:p.z, yaw:p.yaw, turretYaw:p.turretYaw, tx:p.x, tz:p.z, tyaw:p.yaw, ttur:p.turretYaw };
+        remoteBuf.set(p.id, b);
+      } else {
+        b.x = b.tx; b.z = b.tz; b.yaw = b.tyaw; b.turretYaw = b.ttur;
+        b.tx = p.x; b.tz = p.z; b.tyaw = p.yaw; b.ttur = p.turretYaw;
+      }
+      b.t0 = now; b.t1 = now + 70; // 约 1 个 tick 的插值窗口
+      b.alive = p.alive; b.shield = p.shield||0; b.invuln = p.invuln||0;
+      b.color = p.color; b.name = p.name;
+    }
+  }
+  // 清理已离开
+  const live = new Set(s.players.map(p=>p.id));
+  for(const id of remoteBuf.keys()) if(!live.has(id)) remoteBuf.delete(id);
+
+  // 大厅 / 结束 vs 对战观战画面
+  if(s.phase==='lobby' || s.phase==='finished'){
+    overlay.classList.remove('hidden');
+    hud.classList.add('hidden');
+    cross.classList.add('hidden');
+    lobbyBox.classList.add('show');
+    roomTag.textContent = s.code + (isSpectator ? ' · 观战' : '');
+    renderLobby(s);
+    const canStart = s.phase==='lobby' && s.players.length>=2 && (!isSpectator || !!hostKey);
+    btnStart.disabled = !canStart;
+    btnStart.style.display = s.phase==='lobby' && (!isSpectator || !!hostKey) ? '' : 'none';
+    btnRematch.style.display = (s.phase==='finished' && !isSpectator && !hostKey) ? '' : 'none';
+    if(s.phase==='finished'){
+      const res = s.result;
+      if(res && res.rankings){
+        const lines = res.rankings.map((r,i)=>`${i+1}.${r.name} 总分${r.totalScore} 击杀${r.kills}`).join(' | ');
+        setErr('🏆 ' + (res.summary||'') + ' · ' + lines);
+      } else if(res && res.summary) setErr('🏆 ' + res.summary);
+      else setErr('对局结束');
+      pred.active = false;
+      renderBattleReport(res);
+    } else {
+      battleReport.classList.remove('show');
+    }
+    updateShareUI();
+  } else {
+    // countdown / playing / round_break：选手与观众都进入 3D 画面
+    overlay.classList.add('hidden');
+    hud.classList.remove('hidden');
+    if(isSpectator){
+      cross.classList.add('hidden');
+      canvas.style.cursor = 'default';
+      document.getElementById('viewControls').classList.add('show');
+      document.getElementById('spectatorHint').classList.add('show');
+    } else {
+      cross.classList.remove('hidden');
+      canvas.style.cursor = 'none';
+      document.getElementById('viewControls').classList.remove('show');
+      document.getElementById('spectatorHint').classList.remove('show');
+    }
+  }
+  const mayStop = ['countdown','playing','round_break'].includes(s.phase) && (!isSpectator || !!hostKey);
+  document.getElementById('matchActions').classList.toggle('show', mayStop);
+  if(s.phase==='countdown' && s.countdown>0){
+    banner(isSpectator ? ('观战 ' + s.countdown) : ('' + s.countdown));
+  }
+  if(s.phase==='round_break'){
+    const nextGame = (s.round||0) >= (s.roundsTotal||3) ? (s.game||0)+1 : (s.game||1);
+    const nextHand = (s.round||0) >= (s.roundsTotal||3) ? 1 : (s.round||0)+1;
+    banner('即将开始第 ' + nextGame + ' 局 · 第 ' + nextHand + ' 把');
+  }
+
+  ensureTankMeshes(s.players);
+  syncBullets(s.bullets||[]);
+  syncPowerups(s.powerups||[]);
+  for(const e of (s.events||[])) handleEvent(e);
+  if(now - lastHudAt > 150){ updateHUD(s); lastHudAt = now; }
+}
+
+function renderLobby(s){
+  const lines = s.players.map(p=>{
+    const host = p.id===s.hostId ? ' · 房主' : '';
+    const me = p.id===myId ? '（我）' : '';
+    const kind = p.kind==='agent' ? '🤖' : '👤';
+    const col = '#'+p.color.toString(16).padStart(6,'0');
+    return `<div><span class="dot" style="background:${col}"></span>${kind} ${p.name}${me} · ${p.colorName}${host}</div>`;
+  });
+  if(s.spectatorCount) lines.push(`<div style="color:#8fd3ff">👁 观战 ${s.spectatorCount} 人</div>`);
+  const html = lines.join('');
+  if(html !== lastLobbyHtml){ lobbyList.innerHTML = html; lastLobbyHtml = html; }
+}
+
+function colorHex(c){ return '#'+Number(c).toString(16).padStart(6,'0'); }
+
+function ensureTankMeshes(players){
+  const live = new Set(players.map(p=>p.id));
+  for(const id of tankMeshes.keys()){
+    if(!live.has(id)){
+      scene.remove(tankMeshes.get(id).group);
+      tankMeshes.delete(id);
+    }
+  }
+  for(const p of players){
+    if(!tankMeshes.has(p.id)){
+      const o = makeTank(p.color, 1);
+      o.label = makeLabel(p.name, colorHex(p.color));
+      o.group.add(o.label);
+      o.label.position.set(0, 2.8, 0);
+      scene.add(o.group);
+      tankMeshes.set(p.id, o);
+    }
+  }
+}
+
+/** 每帧根据预测/插值更新坦克位置（不依赖网络频率） */
+function updateTankVisuals(now){
+  if(!lastState) return;
+  for(const p of lastState.players){
+    const o = tankMeshes.get(p.id);
+    if(!o) continue;
+    let x,z,yaw,tur,alive,shield,invuln;
+    if(p.id === myId && pred.active && (phase==='playing' || phase==='countdown')){
+      x=pred.x; z=pred.z; yaw=pred.yaw; tur=pred.turretYaw;
+      alive=p.alive; shield=p.shield||0; invuln=p.invuln||0;
+    } else if(p.id !== myId && remoteBuf.has(p.id)){
+      const b = remoteBuf.get(p.id);
+      const t = b.t1>b.t0 ? Math.min(1, Math.max(0, (now-b.t0)/(b.t1-b.t0))) : 1;
+      // smoothstep
+      const u = t*t*(3-2*t);
+      x = b.x + (b.tx-b.x)*u;
+      z = b.z + (b.tz-b.z)*u;
+      yaw = b.yaw + normAng(b.tyaw-b.yaw)*u;
+      tur = b.turretYaw + normAng(b.ttur-b.turretYaw)*u;
+      alive = b.alive; shield = b.shield; invuln = b.invuln;
+    } else {
+      x=p.x; z=p.z; yaw=p.yaw; tur=p.turretYaw;
+      alive=p.alive; shield=p.shield||0; invuln=p.invuln||0;
+    }
+    o.group.visible = !!alive;
+    o.group.position.set(x, 0, z);
+    o.group.rotation.y = yaw;
+    o.turret.rotation.y = tur;
+    // 出生保护不再反复隐藏整辆坦克；只显示平滑光圈，避免画面闪烁。
+    o.shield.visible = alive && (shield > 0 || invuln > 0);
+    if(o.shield.visible) o.shield.material.opacity = invuln > 0 ? .2 : .14;
+  }
+}
+
+function predictLocal(dt){
+  if(isSpectator) return;
+  if(!pred.active || !lastState) return;
+  const me = lastState.players.find(p=>p.id===myId);
+  if(!me || !me.alive || (phase!=='playing' && phase!=='countdown')) return;
+  let {mx,mz} = moveAxes();
+  const len = Math.hypot(mx,mz);
+  if(len>0){
+    mx/=len; mz/=len;
+    pred.x += mx*PLAYER_SPEED*dt;
+    pred.z += mz*PLAYER_SPEED*dt;
+    localCollide(pred, 1.7);
+    const want = Math.atan2(mx,mz);
+    pred.yaw += normAng(want - pred.yaw) * Math.min(1, 10*dt);
+  }
+  localAim();
+  const wantT = Math.atan2(aimPoint.x-pred.x, aimPoint.z-pred.z);
+  pred.turretYaw = normAng(wantT - pred.yaw);
+}
+
+function makeLabel(text, color){
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 64;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0,0,256,64);
+  ctx.font = 'bold 28px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = color;
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 4;
+  ctx.strokeText(text, 128, 40);
+  ctx.fillText(text, 128, 40);
+  const tex = new THREE.CanvasTexture(cv);
+  const mat = new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false});
+  const sp = new THREE.Sprite(mat);
+  sp.scale.set(4, 1, 1);
+  return sp;
+}
+
+function syncBullets(bullets){
+  const keyset = new Set(bullets.map((b,i)=>b.id || `${b.ownerId||'bullet'}-${i}`));
+  for(const k of bulletMeshes.keys()){
+    if(!keyset.has(k)){
+      scene.remove(bulletMeshes.get(k));
+      bulletMeshes.delete(k);
+    }
+  }
+  bullets.forEach((b,i)=>{
+    const key = b.id || `${b.ownerId||'bullet'}-${i}`;
+    let m = bulletMeshes.get(key);
+    if(!m){
+      const color = Number.isFinite(Number(b.color)) ? Number(b.color) : 0xffffff;
+      m = new THREE.Group();
+      const core = new THREE.Mesh(new THREE.SphereGeometry(.3,10,8),new THREE.MeshBasicMaterial({color}));
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(.52,10,8),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.28,depthWrite:false}));
+      m.add(core); m.add(halo);
+      m.userData.color = color;
+      scene.add(m);
+      bulletMeshes.set(key, m);
+    }
+    m.position.set(b.x, b.y||1.4, b.z);
+    const pulse = 1 + Math.sin(performance.now()*.018+i)*.14;
+    if(m.children[1]) m.children[1].scale.setScalar(pulse);
+  });
+}
+
+const PCOLORS = {hp:0x2eff6a, rapid:0xffd54a, shield:0x44aaff};
+function syncPowerups(list){
+  const ids = new Set(list.map(u=>u.id));
+  for(const id of powerMeshes.keys()){
+    if(!ids.has(id)){
+      scene.remove(powerMeshes.get(id));
+      powerMeshes.delete(id);
+    }
+  }
+  for(const u of list){
+    let m = powerMeshes.get(u.id);
+    if(!m){
+      m = new THREE.Mesh(
+        new THREE.OctahedronGeometry(.8),
+        new THREE.MeshStandardMaterial({color:PCOLORS[u.type]||0xffffff, emissive:PCOLORS[u.type]||0xffffff, emissiveIntensity:.6})
+      );
+      scene.add(m);
+      powerMeshes.set(u.id, m);
+    }
+    m.position.set(u.x, 1.2 + Math.sin(performance.now()*.003)*.3, u.z);
+    m.rotation.y += 0.05;
+  }
+}
+
+function handleEvent(e){
+  if(e.kind==='banner') banner(e.text);
+  if(e.kind==='sfx'){
+    if(e.name==='shoot') Sound.shoot();
+    if(e.name==='hit') Sound.hit();
+    if(e.name==='phit') Sound.phit();
+    if(e.name==='boom'){ Sound.boom(); if(e.x!=null){ flash.position.set(e.x,3,e.z); flash.intensity=5; particles.spawn({x:e.x,y:1,z:e.z},{count:50,c1:[1,.8,.2],c2:[.9,.2,0],speed:12,life:1.1,up:8}); } }
+    if(e.name==='crash'){ Sound.boom(); if(e.x!=null){ particles.spawn({x:e.x,y:.5,z:e.z},{count:75,c1:[1,1,1],c2:[1,.2,.1],speed:15,life:1.25,up:10}); spawnImpactRing(e.x,e.z,0xff3b30,true); } }
+    if(e.name==='power') Sound.power();
+    if(e.name==='wave') Sound.wave();
+  }
+  if(e.kind==='kill' && e.x!=null){
+    particles.spawn({x:e.x,y:1,z:e.z},{count:40,c1:[1,.8,.2],c2:[1,.25,0],speed:10,life:.9,up:6});
+  }
+  if(e.kind==='hit' && e.x!=null){
+    const color = Number.isFinite(Number(e.color)) ? Number(e.color) : 0xffffff;
+    const c = new THREE.Color(color);
+    particles.spawn({x:e.x,y:1.2,z:e.z},{count:24,c1:[c.r,c.g,c.b],c2:[1,1,1],speed:7,life:.48,up:5});
+    spawnImpactRing(e.x,e.z,color,false);
+  }
+  if(e.kind==='crash' && e.x!=null) banner(`${(e.playerNames||[]).join(' 与 ')} 对撞，同归于尽！`);
+}
+
+let bannerT = 0;
+function banner(text){
+  bannerEl.textContent = text;
+  bannerEl.style.opacity = 1;
+  bannerT = 1.6;
+}
+
+function updateHUD(s){
+  const me = s.players.find(p=>p.id===myId);
+  const alive = s.players.filter(p=>p.alive).length;
+  const gh = document.getElementById('gameHud');
+  const gt = document.getElementById('gamesTotal');
+  const rh = document.getElementById('roundHud');
+  const rt = document.getElementById('roundsTotal');
+  const th = document.getElementById('timeHud');
+  if(gh) gh.textContent = s.game || '-';
+  if(gt) gt.textContent = s.gamesTotal || 10;
+  if(rh) rh.textContent = s.round || '-';
+  if(rt) rt.textContent = s.roundsTotal || 3;
+  if(th) th.textContent = Math.ceil(s.roundTimeLeft != null ? s.roundTimeLeft : 60);
+  if(me){
+    const rs = document.getElementById('roundScoreHud');
+    const gs = document.getElementById('gameScoreHud');
+    const ts = document.getElementById('totalScoreHud');
+    if(rs) rs.textContent = me.roundScore != null ? me.roundScore : 0;
+    if(gs) gs.textContent = me.gameScore != null ? me.gameScore : 0;
+    if(ts) ts.textContent = me.totalScore != null ? me.totalScore : 0;
+    document.getElementById('hpfill').style.width = Math.max(0, me.hp/me.maxHp*100)+'%';
+    const buffs = [];
+    buffs.push('命 '+me.hp+'/'+me.maxHp);
+    buffs.push('存活 '+alive);
+    if(!isSpectator) buffs.push('Q/E 转镜头 · 滚轮调高低');
+    if(me.invuln>0) buffs.push('出生保护');
+    if(!me.alive) buffs.push('已出局 · 观战到本局结束');
+    if(s.phase==='round_break') buffs.push('局间休息');
+    document.getElementById('buffs').textContent = buffs.join(' · ');
+  }
+  const playerHtml = s.players.slice().sort((a,b)=>(b.totalScore||0)-(a.totalScore||0)).map(p=>{
+    const col = colorHex(p.color);
+    const mark = p.id===myId ? '▶ ' : '';
+    const kind = p.kind==='agent' ? '🤖' : '👤';
+    let st = `${kind} 命${p.hp} 本把${p.roundScore||0} 本局${p.gameScore||0} 总分${p.totalScore||0}`;
+    if(p.waitingNextRound) st += ' · 下一把上场';
+    else if(!p.alive) st += ' · 本把出局';
+    return `<div style="color:${col}">${mark}${p.name} · ${st}</div>`;
+  }).join('');
+  if(playerHtml !== lastPlayerHtml){
+    document.getElementById('plist').innerHTML = playerHtml;
+    lastPlayerHtml = playerHtml;
+  }
+}
+
+// ---------- input（兼容 code / key / keyCode，避免个别浏览器只认一种） ----------
+const keyDown = Object.create(null);
+function markKey(e, down){
+  const tag = (e.target && e.target.tagName) || '';
+  if(tag === 'INPUT' || tag === 'TEXTAREA') return false;
+  const codes = new Set();
+  const physical = e.code || '';
+  const k = (e.key || '').length === 1 ? e.key.toLowerCase() : (e.key || '');
+  // 优先使用物理键位，避免 AZERTY 等布局把物理 Q 同时报告成字符 A。
+  // 只有浏览器不提供 code 时，才使用 key/keyCode 后备。
+  const keyCode = physical || ({87:'KeyW',83:'KeyS',65:'KeyA',68:'KeyD',81:'KeyQ',69:'KeyE',
+    73:'KeyI',75:'KeyK',74:'KeyJ',76:'KeyL',38:'ArrowUp',40:'ArrowDown',37:'ArrowLeft',39:'ArrowRight',32:'Space'}[e.keyCode]) ||
+    ({w:'KeyW',s:'KeyS',a:'KeyA',d:'KeyD',q:'KeyQ',e:'KeyE',i:'KeyI',k:'KeyK',j:'KeyJ',l:'KeyL',' ':'Space'}[k]) || '';
+  if(keyCode === 'KeyW' || keyCode === 'KeyI' || keyCode === 'ArrowUp') codes.add('fwd');
+  if(keyCode === 'KeyS' || keyCode === 'KeyK' || keyCode === 'ArrowDown') codes.add('back');
+  if(keyCode === 'KeyA' || keyCode === 'KeyJ' || keyCode === 'ArrowLeft') codes.add('left');
+  if(keyCode === 'KeyD' || keyCode === 'KeyL' || keyCode === 'ArrowRight') codes.add('right');
+  if(keyCode === 'KeyQ') codes.add('cameraLeft');
+  if(keyCode === 'KeyE') codes.add('cameraRight');
+  if(keyCode === 'Space') codes.add('fire');
+  if(keyCode) keyDown[keyCode] = down;
+  for(const c of codes) keyDown[c] = down;
+  return codes.size > 0;
+}
+function isDown(...names){
+  for(const n of names) if(keyDown[n]) return true;
+  return false;
+}
+addEventListener('keydown', e=>{
+  const hit = markKey(e, true);
+  if(hit || ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE'].includes(e.code)){
+    if(phase==='playing' || phase==='countdown') e.preventDefault();
+  }
+  if(e.code==='KeyM' || e.key==='m' || e.key==='M') muted=!muted;
+  ensureAudio();
+});
+addEventListener('keyup', e=> markKey(e, false));
+addEventListener('blur', ()=>{ for(const k of Object.keys(keyDown)) keyDown[k]=false; });
+addEventListener('mousemove', e=>{
+  mouse.nx = (e.clientX/innerWidth)*2-1;
+  mouse.ny = -(e.clientY/innerHeight)*2+1;
+  cross.style.left = e.clientX+'px';
+  cross.style.top = e.clientY+'px';
+  if(Math.hypot(e.movementX||0,e.movementY||0)>0.5) kbdAim=false;
+});
+addEventListener('mousedown', e=>{ if(e.button===0){ mouse.down=true; ensureAudio(); }});
+addEventListener('mouseup', e=>{ if(e.button===0) mouse.down=false; });
+addEventListener('wheel', e=>{
+  if(isSpectator && (phase==='playing' || phase==='countdown' || phase==='round_break')){
+    spectatorZoom = Math.max(.55,Math.min(2.5,spectatorZoom*Math.exp(-e.deltaY*.0012)));
+    resizeOrthoCamera(spectatorZoom);
+    e.preventDefault();
+    return;
+  }
+  if(phase!=='playing' && phase!=='countdown' && phase!=='round_break') return;
+  cameraHeight = Math.max(8, Math.min(34, cameraHeight + e.deltaY * 0.025));
+  e.preventDefault();
+}, {passive:false});
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  resizeOrthoCamera(isSpectator ? spectatorZoom : 1);
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+function localAim(){
+  // 瞄准仍可用鼠标；方向键已用于移动备用，不再抢瞄准
+  const px = pred.active ? pred.x : (lastState && lastState.players.find(p=>p.id===myId)?.x) || 0;
+  const pz = pred.active ? pred.z : (lastState && lastState.players.find(p=>p.id===myId)?.z) || 0;
+  raycaster.setFromCamera({x:mouse.nx,y:mouse.ny}, activeCamera);
+  const hit = new THREE.Vector3();
+  if(raycaster.ray.intersectPlane(groundPlane, hit)){
+    aimPoint.copy(hit);
+    kbdAim = false;
+  } else if(kbdAim){
+    aimPoint.set(px + aimVec.x*24, 0, pz + aimVec.z*24);
+  }
+  return aimPoint;
+}
+
+function moveAxes(){
+  let forward=0, right=0;
+  if(isDown('fwd','KeyW')) forward+=1;
+  if(isDown('back','KeyS')) forward-=1;
+  if(isDown('left','KeyA')) right-=1;
+  if(isDown('right','KeyD')) right+=1;
+  // 移动方向以当前镜头为参照；鼠标只负责炮台瞄准。
+  return {
+    mx: right*Math.cos(cameraOrbitYaw) - forward*Math.sin(cameraOrbitYaw),
+    mz: -right*Math.sin(cameraOrbitYaw) - forward*Math.cos(cameraOrbitYaw),
+  };
+}
+
+function collectInput(){
+  const {mx,mz} = moveAxes();
+  const aim = localAim();
+  return {
+    type:'input',
+    mx, mz,
+    aimX: +aim.x.toFixed(2), aimZ: +aim.z.toFixed(2),
+    fire: !!(mouse.down || isDown('fire','Space'))
+  };
+}
+
+// 输入 20Hz 对齐服务器；附带 ping
+setInterval(()=>{
+  if(!ws || ws.readyState!==1) return;
+  if(phase!=='playing' && phase!=='countdown') {
+    pingTimer++;
+    if(pingTimer % 10 === 0) send({type:'ping', t: Date.now()});
+    return;
+  }
+  const me = lastState && lastState.players.find(p=>p.id===myId);
+  if(me && !me.alive) {
+    send({type:'input', mx:0,mz:0, aimX:me.x, aimZ:me.z, fire:false});
+    return;
+  }
+  send(collectInput());
+  pingTimer++;
+  if(pingTimer % 20 === 0) send({type:'ping', t: Date.now()});
+}, 1000/20);
+
+// ---------- camera / loop（选手环绕镜头；观战可平移、缩放、跟踪） ----------
+function updateCamera(dt){
+  let tx=0,tz=0;
+  if(isSpectator && lastState){
+    const followed = spectatorFollowId && lastState.players.find(p=>p.id===spectatorFollowId);
+    if(followed){
+      const b = remoteBuf.get(followed.id);
+      const fx = b ? b.tx : followed.x;
+      const fz = b ? b.tz : followed.z;
+      spectatorFocusX += (fx-spectatorFocusX)*Math.min(1,7*dt);
+      spectatorFocusZ += (fz-spectatorFocusZ)*Math.min(1,7*dt);
+    }
+    let panX=0,panZ=0;
+    if(isDown('fwd','KeyW')) panZ-=1;
+    if(isDown('back','KeyS')) panZ+=1;
+    if(isDown('left','KeyA')) panX-=1;
+    if(isDown('right','KeyD')) panX+=1;
+    if(panX||panZ){
+      if(spectatorFollowId){ spectatorFollowId=''; followSelect.value=''; }
+      const len=Math.hypot(panX,panZ)||1;
+      const speed=34/Math.sqrt(spectatorZoom);
+      spectatorFocusX=Math.max(-A,Math.min(A,spectatorFocusX+panX/len*speed*dt));
+      spectatorFocusZ=Math.max(-A,Math.min(A,spectatorFocusZ+panZ/len*speed*dt));
+    }
+    if(spectatorView === '2d'){
+      activeCamera = camera2D;
+      resizeOrthoCamera(spectatorZoom);
+      camera2D.position.set(spectatorFocusX, 140, spectatorFocusZ);
+      camera2D.lookAt(spectatorFocusX, 0, spectatorFocusZ);
+    } else {
+      activeCamera = camera;
+      // 固定斜四十五度的二点五维构图，接近经典等距动作游戏视角。
+      const distance = 70/spectatorZoom;
+      const desired = {x:spectatorFocusX+distance*.72, y:distance*.9, z:spectatorFocusZ+distance*.72};
+      camera.position.x += (desired.x-camera.position.x)*Math.min(1,4*dt);
+      camera.position.y += (desired.y-camera.position.y)*Math.min(1,4*dt);
+      camera.position.z += (desired.z-camera.position.z)*Math.min(1,4*dt);
+      camera.lookAt(spectatorFocusX, 0, spectatorFocusZ);
+    }
+    return;
+  }
+  activeCamera = camera;
+  const me = lastState && lastState.players.find(p=>p.id===myId);
+  if(me && me.alive && pred.active){ tx=pred.x; tz=pred.z; }
+  else if(me && me.alive){ tx=me.x; tz=me.z; }
+  else if(lastState){
+    const alive = lastState.players.find(p=>p.alive);
+    if(alive){
+      const b = remoteBuf.get(alive.id);
+      if(b){ tx=b.tx; tz=b.tz; } else { tx=alive.x; tz=alive.z; }
+    }
+  }
+  // Q/E 只环绕镜头；鼠标移动不会再改变镜头方向。
+  if(isDown('cameraLeft','KeyQ')) cameraOrbitYaw += 1.65*dt;
+  if(isDown('cameraRight','KeyE')) cameraOrbitYaw -= 1.65*dt;
+  const back = 13 + cameraHeight*0.22;
+  const desiredX = tx + Math.sin(cameraOrbitYaw) * back;
+  const desiredZ = tz + Math.cos(cameraOrbitYaw) * back;
+  camera.position.x += (desiredX - camera.position.x)*Math.min(1, 6*dt);
+  camera.position.z += (desiredZ - camera.position.z)*Math.min(1, 6*dt);
+  camera.position.y += (cameraHeight - camera.position.y)*Math.min(1, 6*dt);
+  camera.lookAt(tx, 0.8, tz);
+}
+
+let minimapAcc = 0;
+function drawMinimap(){
+  const mm = document.getElementById('minimap');
+  const ctx = mm.getContext('2d');
+  const W=mm.width, H=mm.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='rgba(10,16,28,.8)';
+  ctx.fillRect(0,0,W,H);
+  if(!lastState) return;
+  const s = W/(A*2);
+  const to = (x,z)=>({x:(x+A)*s, y:(z+A)*s});
+  ctx.fillStyle='#2a3850';
+  for(const o of FIXED_OBSTACLES){
+    const p=to(o.x,o.z);
+    ctx.fillRect(p.x-o.hw*s, p.y-o.hd*s, o.hw*2*s, o.hd*2*s);
+  }
+  for(const p of lastState.players){
+    let x=p.x, z=p.z;
+    if(p.id===myId && pred.active){ x=pred.x; z=pred.z; }
+    else if(remoteBuf.has(p.id)){ const b=remoteBuf.get(p.id); x=b.tx; z=b.tz; }
+    const q=to(x,z);
+    ctx.fillStyle = p.alive ? colorHex(p.color) : '#444';
+    ctx.beginPath(); ctx.arc(q.x,q.y, p.id===myId?4:3, 0, Math.PI*2); ctx.fill();
+    if(p.id===myId){
+      ctx.strokeStyle='#fff'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.arc(q.x,q.y,6,0,Math.PI*2); ctx.stroke();
+    }
+  }
+}
+
+function loop(){
+  requestAnimationFrame(loop);
+  const dt = Math.min(clock.getDelta(), .05);
+  const now = performance.now();
+  if(bannerT>0){ bannerT-=dt; if(bannerT<=0) bannerEl.style.opacity=0; }
+  flash.intensity = Math.max(0, flash.intensity - dt*8);
+  particles.update(dt);
+  updateImpactRings(dt);
+  if(phase==='menu' || phase==='lobby' || !lastState){
+    activeCamera = camera;
+    const t = now*.0002;
+    camera.position.set(Math.cos(t)*45, 26, Math.sin(t)*45);
+    camera.lookAt(0,0,0);
+  } else {
+    predictLocal(dt);
+    updateTankVisuals(now);
+    updateCamera(dt);
+  }
+  minimapAcc += dt;
+  if(minimapAcc > 0.1){ drawMinimap(); minimapAcc = 0; }
+  // 延迟显示
+  if(rttMs > 0 && (phase==='playing'||phase==='countdown')){
+    connEl.textContent = `延迟约 ${rttMs}ms · ${location.host}`;
+  }
+  renderer.render(scene, activeCamera);
+}
+loop();
+
+// ---------- UI：双模式 + 群发 + 观战 ----------
+function publicOrigin(){
+  // 优先当前访问的 origin（请用 http://tank.xiaoxiaole.space 打开本页，复制内容就会是域名）
+  return location.origin;
+}
+function localSpectateUrl(){
+  const base = publicOrigin() + '/?room=' + encodeURIComponent(roomCode||'') + '&spectate=1';
+  return hostKey ? base + '&hostKey=' + encodeURIComponent(hostKey) : base;
+}
+function buildSharePack(){
+  const code = roomCode || '????';
+  const o = publicOrigin();
+  if(uiMode === 'agent'){
+    return [
+      `【坦克混战·Agent局】房间号：${code}`,
+      `服务器：${o}`,
+      ``,
+      `把下面整段发给你的 Agent（Codex / Claude Code 等）：`,
+      ``,
+      `你要作为选手加入坦克混战，不要当观众。`,
+      `服务器 ${o}，房间号 ${code}。`,
+      `步骤：`,
+      `1) POST ${o}/api/v1/rooms/${code}/join`,
+      `   JSON: {"name":"你的名字","kind":"agent","agentId":"唯一id"}`,
+      `2) 保存返回的 playerId、token`,
+      `3) 满 2 人服务器会【自动开局】；你只需等 phase=playing 再作战`,
+      `4) 中途加入会等待当前把结束，从下一把开始参战`,
+      `5) playing 时循环 GET state + POST action (mx,mz,aimX,aimZ,fire)`,
+      `6) 结束后 GET result 看 totalScore 排名`,
+      ``,
+      `规则：3命；命中+1；击杀吞分；10局×每局3把×60秒；2人自动开；中途加入下一把生效。`,
+      `完整说明：${o}/api/v1/docs`,
+    ].join('\n');
+  }
+  return [
+    `【坦克混战·人类测试】房间号：${code}`,
+    `进房：${o}/?room=${code}&autojoin=1`,
+    `观战：${o}/?room=${code}&spectate=1`,
+    `由创建房间的人点「开始混战」。`,
+  ].join('\n');
+}
+function updateShareUI(){
+  const box = document.getElementById('shareBox');
+  const btnCopy = document.getElementById('btnCopyPack');
+  const btnSp = document.getElementById('btnOpenSpectate');
+  const badge = document.getElementById('modeBadge');
+  const hint = document.getElementById('lobbyHint');
+  if(!roomCode){
+    box.textContent='';
+    btnCopy.style.display='none';
+    btnSp.style.display='none';
+    return;
+  }
+  const pack = buildSharePack();
+  shareTextCache = pack;
+  box.textContent = pack;
+  btnCopy.style.display = '';
+  // Agent 模式：开战前不必强调观战按钮；开战会自动跳转
+  btnSp.style.display = uiMode === 'agent' ? 'none' : '';
+  if(uiMode === 'agent' && spectateNavigated) btnSp.style.display = '';
+  spectateUrlCache = localSpectateUrl();
+  if(badge) badge.textContent = uiMode === 'agent' ? 'Agent 房' : '人类测试';
+  if(hint){
+    hint.textContent = uiMode === 'agent'
+      ? '① 复制文案发群  ② Agent 进房  ③ 满2人自动开局  ④ 自动打开全局观战  ⑤ 中途加入的下一把上场'
+      : '人类创建/加入；满2人自动开局。中途加入后从下一把开始参战。';
+  }
+}
+function setMode(mode){
+  uiMode = mode;
+  document.getElementById('tabHuman').classList.toggle('active', mode==='human');
+  document.getElementById('tabAgent').classList.toggle('active', mode==='agent');
+  document.getElementById('panelHuman').classList.toggle('active', mode==='human');
+  document.getElementById('panelAgent').classList.toggle('active', mode==='agent');
+}
+document.getElementById('tabHuman').onclick = ()=> setMode('human');
+document.getElementById('tabAgent').onclick = ()=> setMode('agent');
+
+async function copyText(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    setErr('✅ 已复制，可直接粘贴到群里');
+    const el = document.getElementById('err');
+    if(el) el.classList.add('ok');
+  }catch{
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); setErr('✅ 已复制'); document.getElementById('err').classList.add('ok'); }
+    catch{ setErr('复制失败，请手动选中上方文案'); }
+    document.body.removeChild(ta);
+  }
+}
+document.getElementById('btnCopyPack').onclick = ()=> copyText(buildSharePack());
+document.getElementById('btnOpenSpectate').onclick = ()=>{
+  const url = spectateUrlCache || localSpectateUrl();
+  const w = window.open(url, '_blank', 'noopener,noreferrer');
+  if(!w) setErr('浏览器拦截了弹窗，请允许弹窗后点「再次打开观战」');
+  else setErr('✅ 观战窗口已打开');
+};
+
+function showLobbyShell(code){
+  roomCode = code;
+  roomTag.textContent = code;
+  document.getElementById('roomHud').textContent = code;
+  lobbyBox.classList.add('show');
+  updateShareUI();
+}
+
+// —— 人类测试 ——
+document.getElementById('btnCreate').onclick = ()=>{
+  ensureAudio();
+  hostKey = null;
+  localStorage.setItem('tank4p_name', nameIn.value.trim()||'玩家');
+  connect(()=> send({
+    type:'create',
+    name: nameIn.value.trim()||'玩家',
+    kind:'human',
+    origin: location.origin,
+  }));
+};
+document.getElementById('btnJoin').onclick = ()=>{
+  ensureAudio();
+  hostKey = null;
+  localStorage.setItem('tank4p_name', nameIn.value.trim()||'玩家');
+  const code = codeIn.value.trim().toUpperCase();
+  if(code.length<4) return setErr('请输入 4 位房间码');
+  connect(()=> send({
+    type:'join', code,
+    name: nameIn.value.trim()||'玩家',
+    kind:'human',
+    origin: location.origin,
+  }));
+};
+
+// —— Agent 模式：空房 + 自动弹观战 + 轮询列表 ——
+function stopAgentPoll(){
+  if(agentPollTimer){ clearInterval(agentPollTimer); agentPollTimer = null; }
+}
+function openSpectateWhenMatchStarts(){
+  if(spectateNavigated || !roomCode) return;
+  const url = spectateUrlCache || localSpectateUrl();
+  spectateNavigated = true;
+  // 优先使用创建时预开的窗口（避免弹窗拦截）
+  try{
+    if(spectateWin && !spectateWin.closed){
+      spectateWin.location.href = url;
+      spectateWin.focus();
+      setErr('✅ 对局已开始 · 观战窗口已跳转到 3D 战场');
+      document.getElementById('err').classList.add('ok');
+      return;
+    }
+  }catch(e){/* cross-origin ignore */}
+  const w = window.open(url, '_blank', 'noopener,noreferrer');
+  if(!w){
+    setErr('对局已开始，但弹窗被拦 — 请点「再次打开观战」看 3D 战场');
+    const btnSp = document.getElementById('btnOpenSpectate');
+    if(btnSp) btnSp.style.display = '';
+  } else {
+    setErr('✅ 对局已开始 · 已打开 3D 观战');
+    document.getElementById('err').classList.add('ok');
+  }
+}
+
+async function refreshAgentLobbyList(){
+  if(!roomCode) return;
+  try{
+    const r = await fetch(publicOrigin() + '/api/v1/rooms/' + roomCode).then(x=>x.json());
+    if(!r.ok) return;
+    const n = (r.players||[]).length;
+    const lines = (r.players||[]).map(p=>{
+      const kind = p.kind==='agent' ? '🤖' : '👤';
+      return `<div>${kind} ${p.name}</div>`;
+    });
+    if(r.phase === 'lobby'){
+      lines.push(`<div style="margin-top:6px;font-weight:800">选手 ${n} 人 · 满 2 人将自动开局</div>`);
+      if(n < 2) lines.push(`<div style="color:#666">再等 ${2-n} 人…</div>`);
+      else lines.push(`<div style="color:#0a7a32">应已自动开局 / 即将开局</div>`);
+    } else {
+      lines.push(`<div style="margin-top:6px;font-weight:800">状态：${r.phase} · 开战会自动 3D 观战</div>`);
+    }
+    lobbyList.innerHTML = lines.join('');
+    btnStart.disabled = !(r.phase==='lobby' && n >= 2);
+    btnStart.style.display = r.phase==='lobby' ? '' : 'none';
+    btnStart.textContent = '手动开始（备用）';
+
+    // 关键：只有真正开战（countdown/playing）才打开观战 3D
+    if(r.phase === 'countdown' || r.phase === 'playing' || r.phase === 'round_break'){
+      openSpectateWhenMatchStarts();
+    }
+  }catch(e){/* ignore */}
+}
+document.getElementById('btnAgentLobby').onclick = async ()=>{
+  ensureAudio();
+  setErr('正在创建 Agent 房间…');
+  document.getElementById('err').classList.remove('ok');
+  stopAgentPoll();
+  spectateNavigated = false;
+  // 用户点击手势下预开空白窗，开战再跳转（避免「空房间观战」又避免弹窗拦截）
+  try{
+    spectateWin = window.open('about:blank', 'tank_spectate_' + Date.now());
+    if(spectateWin){
+      try{
+        spectateWin.document.write('<p style="font-family:sans-serif;padding:24px">房间已创建，等待 Agent 到齐并开始后，这里会自动进入 3D 观战…</p>');
+      }catch(e){}
+    }
+  }catch(e){ spectateWin = null; }
+
+  try{
+    const r = await fetch(publicOrigin() + '/api/v1/rooms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empty: true, mode: 'agent_lobby' }),
+    }).then(x=>x.json());
+    if(!r.ok) return setErr(r.err || '创建失败');
+    hostKey = r.hostKey;
+    isSpectator = true;
+    shareTextCache = '';
+    showLobbyShell(r.code);
+    setErr('✅ 房间已建 · 请复制文案发群；Agent 进房并 start 后会自动进入 3D 观战');
+    document.getElementById('err').classList.add('ok');
+    copyText(buildSharePack());
+    agentPollTimer = setInterval(refreshAgentLobbyList, 1200);
+    refreshAgentLobbyList();
+  }catch(e){
+    setErr('创建失败：' + (e.message||e));
+  }
+};
+
+btnStart.onclick = async ()=>{
+  ensureAudio();
+  // 人类模式：WS start；Agent 房：hostKey 仅作调试备用（正常应由 Agent POST start）
+  if(hostKey && roomCode){
+    try{
+      const r = await fetch(publicOrigin() + '/api/v1/rooms/' + roomCode + '/start', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ hostKey }),
+      }).then(x=>x.json());
+      if(!r.ok) return setErr(r.err||'无法开始');
+      setErr('✅ 已手动开始 · 正在打开 3D 观战…');
+      openSpectateWhenMatchStarts();
+    }catch(e){ setErr('开始失败'); }
+    return;
+  }
+  send({type:'start'});
+};
+btnRematch.onclick = ()=>{ ensureAudio(); setErr(''); hostKey=null; stopAgentPoll(); send({type:'rematch'}); };
+btnStopMatch.onclick = ()=>{
+  if(!window.confirm('确定提前结束本场比赛吗？当前积分会立即结算并生成战报。')) return;
+  btnStopMatch.disabled = true;
+  btnStopMatch.textContent = '正在结束…';
+  send({type:'stop', hostKey: hostKey||undefined});
+  setTimeout(()=>{ btnStopMatch.disabled=false; btnStopMatch.textContent='提前结束并生成战报'; },1500);
+};
+
+// 观战不发操作
+const _collectInput = collectInput;
+collectInput = function(){
+  if(isSpectator) return { type:'input', mx:0, mz:0, aimX:0, aimZ:0, fire:false };
+  return _collectInput();
+};
+
+// URL：?room=XXXX&autojoin=1 | &spectate=1
+(function bootFromQuery(){
+  const q = new URLSearchParams(location.search);
+  const room = (q.get('room')||'').toUpperCase().trim();
+  const auto = q.get('autojoin') === '1' || q.get('join') === '1';
+  const spectate = q.get('spectate') === '1' || q.get('watch') === '1';
+  if(q.get('hostKey')) hostKey = q.get('hostKey');
+  if(q.get('name')) nameIn.value = q.get('name');
+  if(room){
+    codeIn.value = room;
+    if(spectate){
+      document.title = '观战 · 坦克混战 ' + room;
+      setMode('human');
+      connect(()=> send({
+        type:'spectate',
+        code: room,
+        name: (document.getElementById('agentHostName').value||nameIn.value||'观众').trim(),
+        origin: location.origin,
+      }));
+    } else if(auto){
+      setMode('human');
+      connect(()=> send({
+        type:'join',
+        code: room,
+        name: nameIn.value.trim()||'玩家',
+        kind:'human',
+        origin: location.origin,
+      }));
+    } else {
+      connect();
+    }
+  } else {
+    connect();
+  }
+})();
+</script>
+</body>
+</html>
