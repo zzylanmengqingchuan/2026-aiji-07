@@ -75,6 +75,33 @@ const OBSTACLES = (() => {
   return list;
 })();
 
+// 可被坦克撞飞的轻型木箱。它们只提供动态反馈，不参与射线遮挡和胜负判定，
+// 因此不会改变既有对战平衡；位置与旋转仍由服务端同步，所有客户端看到一致结果。
+const CRATE_SPAWNS = [
+  [-10, -4], [12, 9], [-33, 18], [33, -16],
+  [-7, 34], [24, 31], [-35, -23], [5, -36],
+];
+
+function freshCrates() {
+  return CRATE_SPAWNS.map(([x, z], i) => ({
+    id: `crate-${i + 1}`,
+    kind: 'crate',
+    x,
+    y: 0.75,
+    z,
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    rx: 0,
+    ry: (i * 0.73) % (Math.PI * 2),
+    rz: 0,
+    vrx: 0,
+    vry: 0,
+    vrz: 0,
+    hitCd: 0,
+  }));
+}
+
 function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
 }
@@ -138,6 +165,7 @@ class Room {
     this.order = [];
     this.bullets = [];
     this.powerups = [];
+    this.props = freshCrates();
     this.state = 'lobby';
     this.countdown = 0;
     this.hostId = null;
@@ -392,6 +420,16 @@ class Room {
           }))
         : [],
       powerups: [], // 新规则下无系统补给，避免干扰积分
+      props: this.props.map((p) => ({
+        id: p.id,
+        kind: p.kind,
+        x: r2(p.x),
+        y: r2(p.y),
+        z: r2(p.z),
+        rx: r2(p.rx),
+        ry: r2(p.ry),
+        rz: r2(p.rz),
+      })),
       events: this.events.splice(0, this.events.length),
       result: this.state === 'finished' ? this.result : null,
       spectatorCount: this.spectators.size,
@@ -472,6 +510,7 @@ class Room {
     }
     this.bullets = [];
     this.powerups = [];
+    this.props = freshCrates();
   }
 
   /**
@@ -866,6 +905,35 @@ class Room {
         p.z = pos.z;
         const wantYaw = Math.atan2(mx, mz);
         p.yaw = p.yaw + normAngle(wantYaw - p.yaw) * Math.min(1, 10 * DT);
+
+        // 木箱是轻型动态道具：坦克保持原速度穿过，木箱获得冲量并腾空翻滚。
+        for (const prop of this.props) {
+          const dx = prop.x - p.x;
+          const dz = prop.z - p.z;
+          const d = hypot(dx, dz);
+          if (d >= 2.45) continue;
+          const force = 1 - d / 2.45;
+          prop.vx += mx * (18 + force * 18);
+          prop.vz += mz * (18 + force * 18);
+          prop.vy = Math.max(prop.vy, 3.8 + force * 4.5);
+          prop.vrx += -mz * (3.5 + force * 4);
+          prop.vrz += mx * (3.5 + force * 4);
+          prop.vry += (mx - mz) * 2.8;
+          if (prop.hitCd <= 0) {
+            prop.hitCd = 0.35;
+            this.events.push({
+              kind: 'prop_hit',
+              id: prop.id,
+              propKind: prop.kind,
+              x: r2(prop.x),
+              y: r2(prop.y),
+              z: r2(prop.z),
+              speed: r2(Math.hypot(prop.vx, prop.vz)),
+              playerId: p.id,
+            });
+            this.events.push({ kind: 'sfx', name: 'crate', x: r2(prop.x), z: r2(prop.z) });
+          }
+        }
       }
 
       p.aimX = inp.aimX;
@@ -897,6 +965,39 @@ class Room {
         });
         p.fireCd = p.rapid > 0 ? FIRE_CD_RAPID : FIRE_CD;
         this.events.push({ kind: 'sfx', name: 'shoot', x: mx0, z: mz0 });
+      }
+    }
+
+    // 动态道具的轻量刚体积分：重力、地面反弹、摩擦、边界回弹。
+    for (const prop of this.props) {
+      prop.hitCd = Math.max(0, prop.hitCd - DT);
+      prop.x += prop.vx * DT;
+      prop.y += prop.vy * DT;
+      prop.z += prop.vz * DT;
+      prop.rx += prop.vrx * DT;
+      prop.ry += prop.vry * DT;
+      prop.rz += prop.vrz * DT;
+      prop.vy -= 18 * DT;
+      if (prop.y < 0.75) {
+        prop.y = 0.75;
+        if (prop.vy < -1.2) prop.vy *= -0.28;
+        else prop.vy = 0;
+        prop.vx *= 0.86;
+        prop.vz *= 0.86;
+        prop.vrx *= 0.8;
+        prop.vry *= 0.8;
+        prop.vrz *= 0.8;
+      } else {
+        prop.vx *= 0.992;
+        prop.vz *= 0.992;
+      }
+      if (Math.abs(prop.x) > A - 1) {
+        prop.x = clamp(prop.x, -A + 1, A - 1);
+        prop.vx *= -0.45;
+      }
+      if (Math.abs(prop.z) > A - 1) {
+        prop.z = clamp(prop.z, -A + 1, A - 1);
+        prop.vz *= -0.45;
       }
     }
 
