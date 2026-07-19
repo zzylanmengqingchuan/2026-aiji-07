@@ -6,6 +6,9 @@
 <title>坦克混战 · Agent Arena</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preload" href="/assets/tank-arena-home-v1.webp" as="image" type="image/webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700;9..40,800;9..40,900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#fff; --fg:#000; --card:#fff;
@@ -23,24 +26,28 @@
   #c{display:block;cursor:none}
   #hud{position:fixed;inset:0;pointer-events:none;z-index:5}
   #topleft{position:absolute;top:14px;left:14px}
-  #stats{font-size:13px;font-weight:700;background:var(--secondary);border:2px solid #000;box-shadow:var(--shadow);padding:8px 10px}
+  #stats{font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;background:var(--secondary);border:2px solid #000;box-shadow:var(--shadow);padding:8px 10px}
   #stats b{color:var(--primary)}
   #hpbar{width:220px;height:16px;background:#fff;border:2px solid #000;margin-top:8px;box-shadow:var(--shadow);overflow:hidden}
-  #hpfill{height:100%;width:100%;background:var(--primary);transition:width .1s}
-  #buffs{margin-top:8px;font-size:12px;font-weight:600;background:#fff;border:2px solid #000;padding:6px 8px;box-shadow:var(--shadow);min-height:16px}
-  #plist{margin-top:8px;font-size:12px;line-height:1.65;font-weight:600;background:#fff;border:2px solid #000;padding:8px;box-shadow:var(--shadow);max-width:280px}
+  #hpfill{height:100%;width:100%;background:repeating-linear-gradient(-45deg,var(--primary) 0 9px,#b92c1d 9px 18px);transition:width .1s}
+  #buffs{margin-top:8px;font-size:12px;font-weight:700;background:#fff;border:2px solid #000;padding:6px 8px;box-shadow:var(--shadow);min-height:16px}
+  #plist{margin-top:8px;font-size:12px;line-height:1.65;font-weight:700;background:#fff;border:2px solid #000;padding:8px;box-shadow:var(--shadow);max-width:280px}
   #minimap{position:absolute;top:14px;right:14px;border:3px solid #000;box-shadow:var(--shadow);background:#fff}
   #viewControls{position:absolute;top:178px;right:14px;display:none;gap:8px;pointer-events:auto;flex-wrap:wrap;justify-content:flex-end;max-width:min(680px,calc(100vw - 28px))}
   #viewControls.show{display:flex}
-  .view-btn{cursor:pointer;border:2px solid #000;background:#fff;color:#000;font-weight:800;padding:7px 10px;box-shadow:2px 2px 0 #000}
+  .view-btn{cursor:pointer;border:2px solid #000;background:#fff;color:#000;font-weight:800;padding:7px 10px;box-shadow:2px 2px 0 #000;transition:transform .05s,box-shadow .05s}
+  .view-btn:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 #000}
+  .view-btn:active{transform:translate(1px,1px);box-shadow:1px 1px 0 #000}
   .view-btn.active{background:var(--accent);color:#fff}
   #followSelect{cursor:pointer;border:2px solid #000;background:#fff;color:#000;font-weight:800;padding:7px 10px;box-shadow:2px 2px 0 #000;max-width:190px}
   #spectatorHint{position:absolute;top:224px;right:14px;display:none;background:rgba(255,255,255,.94);border:2px solid #000;box-shadow:2px 2px 0 #000;padding:7px 10px;font-size:12px;font-weight:800}
   #spectatorHint.show{display:block}
   #matchActions{position:absolute;right:14px;bottom:18px;display:none;pointer-events:auto}
   #matchActions.show{display:block}
-  #btnStopMatch{cursor:pointer;border:2px solid #000;background:#e23d2b;color:#fff;font-weight:900;padding:9px 13px;box-shadow:3px 3px 0 #000}
-  #banner{position:absolute;top:16%;width:100%;text-align:center;font-size:40px;font-weight:800;color:#000;background:var(--secondary);border:3px solid #000;box-shadow:var(--shadow);width:auto;left:50%;transform:translateX(-50%);padding:8px 20px;opacity:0;transition:opacity .25s;pointer-events:none}
+  #btnStopMatch{cursor:pointer;border:2px solid #000;background:var(--primary);color:#fff;font-weight:900;padding:9px 13px;box-shadow:3px 3px 0 #000;text-transform:uppercase;letter-spacing:.03em;transition:transform .05s,box-shadow .05s}
+  #btnStopMatch:hover{transform:translate(-1px,-1px);box-shadow:4px 4px 0 #000}
+  #btnStopMatch:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #000}
+  #banner{position:absolute;top:16%;width:100%;text-align:center;font-size:40px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;color:#000;background:var(--secondary);border:3px solid #000;box-shadow:var(--shadow);width:auto;left:50%;transform:translateX(-50%);padding:8px 20px;opacity:0;transition:opacity .25s;pointer-events:none}
   #cross{position:fixed;width:26px;height:26px;margin:-13px 0 0 -13px;pointer-events:none;z-index:6}
   #cross::before,#cross::after{content:'';position:absolute;background:var(--primary)}
   #cross::before{left:12px;top:0;width:3px;height:26px}
@@ -83,20 +90,21 @@
   .hero-chips span{font-size:11px;font-weight:900;color:#fff;background:rgba(7,17,31,.82);border:1px solid rgba(255,255,255,.42);padding:4px 8px;box-shadow:2px 2px 0 rgba(0,0,0,.8)}
 
   .mode-tabs{display:flex;gap:0;margin-bottom:14px;border:3px solid #000;box-shadow:var(--shadow);background:rgba(255,255,255,.96);backdrop-filter:blur(8px);animation:heroEnter .5s .12s cubic-bezier(.2,.8,.2,1) both}
-  .mode-tab{pointer-events:auto;cursor:pointer;border:none;background:#fff;color:#000;font-family:var(--font);font-weight:800;font-size:15px;padding:12px 22px;min-width:140px}
+  .mode-tab{pointer-events:auto;cursor:pointer;border:none;background:#fff;color:#000;font-family:var(--font);font-weight:900;font-size:15px;letter-spacing:.04em;text-transform:uppercase;padding:12px 22px;min-width:140px;transition:background .08s}
   .mode-tab + .mode-tab{border-left:3px solid #000}
   .mode-tab.active{background:var(--primary);color:#fff}
   .mode-tab:hover:not(.active){background:var(--secondary)}
 
   .panel{background:rgba(255,255,255,.95);border:3px solid #000;box-shadow:7px 7px 0 rgba(0,0,0,.9);padding:20px 22px;width:min(500px,94vw);text-align:left;backdrop-filter:blur(10px);animation:heroEnter .5s .2s cubic-bezier(.2,.8,.2,1) both}
-  .panel h2{font-size:18px;font-weight:800;margin-bottom:6px}
+  .panel h2{font-size:18px;font-weight:900;letter-spacing:-.01em;margin-bottom:6px}
   .panel .hint{font-size:13px;color:var(--muted-fg);line-height:1.55;margin-bottom:12px;font-weight:500}
-  .panel label{display:block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;margin:12px 0 6px}
-  .panel input{width:100%;padding:12px 12px;border:3px solid #000;border-radius:var(--radius);background:#fff;color:#000;font-size:16px;font-family:var(--font);font-weight:600;outline:none;box-shadow:3px 3px 0 #000}
-  .panel input:focus{outline:3px solid var(--accent);outline-offset:1px}
+  .panel label{display:block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin:12px 0 6px}
+  .panel input{width:100%;padding:12px 12px;border:3px solid #000;border-radius:var(--radius);background:#fff;color:#000;font-size:16px;font-family:var(--font);font-weight:600;outline:none;box-shadow:3px 3px 0 #000;transition:box-shadow .05s,transform .05s}
+  .panel input:focus{outline:none;border-color:var(--accent);box-shadow:4px 4px 0 var(--accent);transform:translate(-1px,-1px)}
   .row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
-  .btn{pointer-events:auto;cursor:pointer;font-family:var(--font);font-size:15px;font-weight:800;padding:12px 16px;border:3px solid #000;border-radius:var(--radius);background:var(--primary);color:#fff;box-shadow:var(--shadow);flex:1;min-width:120px;transition:transform .05s}
-  .btn:active{transform:translate(2px,2px);box-shadow:2px 2px 0 #000}
+  .btn{pointer-events:auto;cursor:pointer;font-family:var(--font);font-size:15px;font-weight:900;letter-spacing:.03em;text-transform:uppercase;padding:12px 16px;border:3px solid #000;border-radius:var(--radius);background:var(--primary);color:#fff;box-shadow:var(--shadow);flex:1;min-width:120px;transition:transform .05s,box-shadow .05s}
+  .btn:hover:not(:disabled){transform:translate(-1px,-1px);box-shadow:5px 5px 0 #000}
+  .btn:active:not(:disabled){transform:translate(2px,2px);box-shadow:1px 1px 0 #000}
   .btn.secondary{background:var(--secondary);color:#000}
   .btn.accent{background:var(--accent);color:#fff}
   .btn.ghost{background:#fff;color:#000}
@@ -629,14 +637,30 @@ for(let i=0;i<44;i++){
   addTree(x,z,.72+(i%5)*.08);
 }
 const rockMat=new THREE.MeshStandardMaterial({color:0x697168,roughness:1,flatShading:true});
-// 小石块仅供装饰，不参与服务器碰撞；坦克碾过时客户端做抬头/侧倾的三维姿态变化
+// 小石块仅供装饰，不参与服务器碰撞；坦克碾过时客户端做抬头/侧倾的三维姿态变化，并把石头踢飞翻滚
 const smallRocks=[];
 for(let i=0;i<32;i++){
   const ang=i*2.399, rad=42+(i%4)*3.2, x=Math.cos(ang)*rad, z=Math.sin(ang)*rad;
   const rr=.45+(i%3)*.18;
   const rock=new THREE.Mesh(new THREE.DodecahedronGeometry(rr,0),rockMat);
   rock.scale.y=.6; rock.position.set(x,.25,z); rock.rotation.set(i*.31,i*.73,0); rock.castShadow=false; terrainGroup.add(rock);
-  smallRocks.push({x,z,r:rr+.9,h:.22+rr*.5});
+  smallRocks.push({x,z,r:rr+.9,h:.22+rr*.5,mesh:rock,vy:0,vx:0,vz:0,vr:0,flying:false,restY:.25});
+}
+function updateSmallRocks(dt){
+  for(const rk of smallRocks){
+    if(!rk.flying) continue;
+    rk.vy-=22*dt;
+    rk.mesh.position.x+=rk.vx*dt;
+    rk.mesh.position.y+=rk.vy*dt;
+    rk.mesh.position.z+=rk.vz*dt;
+    rk.mesh.rotation.y+=rk.vr*dt;
+    rk.mesh.rotation.x+=rk.vr*.6*dt;
+    if(rk.mesh.position.y<=rk.restY){
+      rk.mesh.position.y=rk.restY;
+      if(Math.abs(rk.vy)>2){ rk.vy*=-.32; rk.vx*=.6; rk.vz*=.6; }
+      else{ rk.flying=false; rk.x=rk.mesh.position.x; rk.z=rk.mesh.position.z; }
+    }
+  }
 }
 const mountainMat=new THREE.MeshStandardMaterial({color:0x7f876f,flatShading:true,roughness:1});
 for(let i=0;i<14;i++){
@@ -1073,17 +1097,23 @@ function clearDents(o){
 function spawnImpactFx(x,z,nx=0,nz=1,speed=6,playerId=null){
   const k=Math.min(1,speed/16), y=1.1;
   // 金属碰撞火花：沿法线反弹方向喷溅，速度越大越猛
-  const n=Math.floor(10+k*14);
+  const n=Math.floor(14+k*18);
   for(let i=0;i<n;i++){
-    const spread=(Math.random()-.5)*6;
+    const spread=(Math.random()-.5)*7;
     sparkPool.spawn(x,y+Math.random()*.9,z,
-      nx*(2+Math.random()*6)+nz*spread, 1.5+Math.random()*4.5, nz*(2+Math.random()*6)-nx*spread,
-      .25+Math.random()*.3, 1,.85,.4);
+      nx*(2+Math.random()*7)+nz*spread, 1.5+Math.random()*5.5, nz*(2+Math.random()*7)-nx*spread,
+      .28+Math.random()*.32, 1,.85,.4);
   }
-  dustFx.spawn(x,.4,z,{count:Math.floor(6+k*8),life:.8,spread:1.2,speed:2.4,up:1.2});
-  spawnDebris(x,1,z,Math.floor(2+k*4),4+k*5);
-  spawnImpactRing(x,z,0xffd9a0,false);
-  spawnCombatLight(x,1.6,z,2.5+k*3,.22,0xffc46b);
+  // 重撞追加火团与更多碎块，撞房屋/石堆也能看出明显的“撞击感”
+  if(k>.45){
+    for(let i=0;i<Math.floor(4+k*5);i++){
+      firePool.spawn(x,y+.3,z,nx*(1+Math.random()*3)+(Math.random()-.5)*2,.8+Math.random()*2.4,nz*(1+Math.random()*3)+(Math.random()-.5)*2,.25+Math.random()*.25,1,.6,.18);
+    }
+  }
+  dustFx.spawn(x,.4,z,{count:Math.floor(8+k*10),life:.9,spread:1.3,speed:2.8,up:1.4});
+  spawnDebris(x,1,z,Math.floor(4+k*6),5+k*6);
+  spawnImpactRing(x,z,0xffd9a0,k>.55);
+  spawnCombatLight(x,1.6,z,3+k*4,.24,0xffc46b);
   if(playerId===myId) cameraShake=Math.max(cameraShake,.12+k*.22);
 }
 function spawnExplosionFx(x,z,scale=1){
@@ -1549,7 +1579,7 @@ function updateTankVisuals(now){
       ud.turnRate=(ud.turnRate||0)+(rawTurn-(ud.turnRate||0))*smoothing;
       ud.speed=speed;
       const accel=(speed-(ud.prevSpeed||0))/frameDt;
-      // 碾过小石块：按石块在车体系中的方位产生抬头/侧倾和抬升，模拟真实压过凸起物
+      // 碾过小石块：按石块在车体系中的方位产生抬头/侧倾和抬升，模拟真实压过凸起物；石块被踢飞翻滚
       let rockLift=0,rockPitch=0,rockRoll=0;
       for(const rk of smallRocks){
         const rdx=rk.x-x, rdz=rk.z-z, rd=Math.hypot(rdx,rdz);
@@ -1560,6 +1590,14 @@ function updateTankVisuals(now){
         rockLift=Math.max(rockLift,overlap*rk.h);
         rockPitch+=-Math.sign(fwd||.001)*overlap*.16;
         rockRoll+=Math.sign(side||.001)*overlap*.13;
+        if(!rk.flying && speed>3 && now-(rk.lastKick||0)>1200){
+          rk.lastKick=now; rk.flying=true;
+          const kd=Math.max(.3,rd);
+          rk.vx=rdx/kd*(2.5+speed*.28)+(Math.random()-.5)*1.2;
+          rk.vz=rdz/kd*(2.5+speed*.28)+(Math.random()-.5)*1.2;
+          rk.vy=3.2+Math.random()*2.2; rk.vr=(Math.random()-.5)*9;
+          dustFx.spawn(rk.x,.3,rk.z,{count:6,life:.7,spread:.8,speed:2,up:1.4});
+        }
       }
       // 加速俯仰/转向侧倾保持老版本的小幅度；碾石姿态在此基础上额外叠加
       const basePitch=Math.max(-.12,Math.min(.12,-accel*.006));
@@ -2070,6 +2108,7 @@ function loop(){
   updateTracks(dt);
   updateImpactRings(dt);
   updateCombatFx(dt);
+  updateSmallRocks(dt);
   // 曳光尾迹：飞行中的炮弹持续洒火花（移植自 TankBlitz）
   for(const m of bulletMeshes.values()){
     if(Math.random()<.7) sparkPool.spawn(m.position.x,m.position.y,m.position.z,(Math.random()-.5)*.8,(Math.random()-.5)*.8,(Math.random()-.5)*.8,.22,1,.72,.3);

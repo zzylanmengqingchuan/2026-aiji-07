@@ -979,7 +979,7 @@ class Room {
       // 撞上墙壁/障碍物：记录撞击事件（客户端做火花/凹痕/震屏），速度越大效果越强
       if (wallHit.nx != null && p.impactCd <= 0) {
         const into = Math.abs((p.vx || 0) * wallHit.nx + (p.vz || 0) * wallHit.nz);
-        if (into > 4.5) {
+        if (into > 3.5) {
           p.impactCd = 0.35;
           this.events.push({
             kind: 'impact', playerId: p.id,
