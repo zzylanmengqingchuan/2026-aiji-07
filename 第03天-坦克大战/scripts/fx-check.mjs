@@ -66,12 +66,17 @@ try{
     await page.screenshot({path:join(outDir,`boom-${i}.png`)});
     await page.waitForTimeout(220);
   }
-  // 再触发一次炮口特效
+  // 触发撞击特效 + 给坦克打凹痕
   await page.evaluate(()=>{
     const t=window.__tankDebug?.tanks?.[0];
-    if(t&&window.__tankFx) window.__tankFx.muzzle(t.id,t.x,t.z,1,0.3);
+    if(!t||!window.__tankFx) return;
+    window.__tankFx.impact(t.x+1.8,t.z,-1,0,12,t.id);
+    window.__tankFx.dent(t.id,t.x+1.8,t.z,-1,0);
+    window.__tankFx.dent(t.id,t.x,t.z+2.2,0,-1);
   });
-  await page.screenshot({path:join(outDir,'muzzle-0.png')});
+  await page.screenshot({path:join(outDir,'impact-0.png')});
+  await page.waitForTimeout(600);
+  await page.screenshot({path:join(outDir,'impact-1.png')});
   console.log('done');
 }finally{
   if(actionTimer)clearInterval(actionTimer);

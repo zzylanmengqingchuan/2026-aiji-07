@@ -470,6 +470,7 @@ const Sound = {
   boom(){ ensureAudio(); noiseBurst(.92,.48,2400,60); tone(90,.82,'sine',.42,26); },
   crash(){ ensureAudio(); noiseBurst(.68,.5,1800,70); tone(115,.52,'square',.28,30); },
   crate(){ ensureAudio(); noiseBurst(.18,.12,1300,180); tone(95,.12,'square',.08,62); },
+  bump(){ ensureAudio(); noiseBurst(.14,.2,880,130); tone(88,.16,'triangle',.18,42); tone(460,.05,'square',.045,320); },
   power(){ ensureAudio(); tone(660,.12,'sine',.11,880); setTimeout(()=>tone(880,.14,'sine',.08,1100),70); },
   wave(){ ensureAudio(); tone(440,.18,'square',.09,660); setTimeout(()=>tone(660,.22,'square',.07,880),100); },
 };
@@ -628,10 +629,14 @@ for(let i=0;i<44;i++){
   addTree(x,z,.72+(i%5)*.08);
 }
 const rockMat=new THREE.MeshStandardMaterial({color:0x697168,roughness:1,flatShading:true});
+// 小石块仅供装饰，不参与服务器碰撞；坦克碾过时客户端做抬头/侧倾的三维姿态变化
+const smallRocks=[];
 for(let i=0;i<32;i++){
   const ang=i*2.399, rad=42+(i%4)*3.2, x=Math.cos(ang)*rad, z=Math.sin(ang)*rad;
-  const rock=new THREE.Mesh(new THREE.DodecahedronGeometry(.45+(i%3)*.18,0),rockMat);
+  const rr=.45+(i%3)*.18;
+  const rock=new THREE.Mesh(new THREE.DodecahedronGeometry(rr,0),rockMat);
   rock.scale.y=.6; rock.position.set(x,.25,z); rock.rotation.set(i*.31,i*.73,0); rock.castShadow=false; terrainGroup.add(rock);
+  smallRocks.push({x,z,r:rr+.9,h:.22+rr*.5});
 }
 const mountainMat=new THREE.MeshStandardMaterial({color:0x7f876f,flatShading:true,roughness:1});
 for(let i=0;i<14;i++){
@@ -1032,6 +1037,54 @@ function spawnMuzzleFx(playerId,x,z,dx=0,dz=1){
   }
   spawnCombatLight(x,y,z,5.5,.13,0xffc46b);
   if(playerId===myId){ cameraShake=Math.max(cameraShake,.18); fovKick=1; }
+}
+// ---------- 碰撞特效：金属火花 + 碎块崩落 + 车体凹痕 ----------
+const dentGeo=new THREE.CircleGeometry(.3,7);
+const dentMat=new THREE.MeshStandardMaterial({color:0x1c1a16,roughness:1,metalness:.35,polygonOffset:true,polygonOffsetFactor:-1});
+function addDent(playerId,x,z,nx,nz){
+  const o=tankMeshes.get(playerId);
+  if(!o) return;
+  const ud=o.group.userData;
+  ud.dents=ud.dents||[];
+  // 世界坐标 → 车体系，凹痕贴在朝向撞击方向的车体表面
+  const dx=x-o.group.position.x, dz=z-o.group.position.z;
+  const yaw=o.group.rotation.y, cos=Math.cos(-yaw), sin=Math.sin(-yaw);
+  const lx=cos*dx-sin*dz, lz=sin*dx+cos*dz;
+  const lnx=cos*-nx-sin*-nz, lnz=sin*-nx+cos*-nz;
+  const dent=new THREE.Mesh(dentGeo,dentMat);
+  const side=Math.abs(lnx)>Math.abs(lnz)?'x':'z';
+  if(side==='x'){
+    dent.position.set(Math.sign(lnx||1)*1.42,1.05+Math.random()*.5,Math.max(-1.9,Math.min(1.9,lz)));
+  }else{
+    dent.position.set(Math.max(-1.2,Math.min(1.2,lx)),1.05+Math.random()*.5,Math.sign(lnz||1)*2.12);
+  }
+  dent.rotation.y=Math.atan2(lnx,lnz);
+  const s=.7+Math.random()*.9;
+  dent.scale.set(s,s*(.6+Math.random()*.5),1);
+  o.rig.add(dent);
+  ud.dents.push(dent);
+  if(ud.dents.length>10){ const old=ud.dents.shift(); o.rig.remove(old); }
+}
+function clearDents(o){
+  const ud=o.group.userData;
+  for(const d of ud.dents||[]) o.rig.remove(d);
+  ud.dents=[];
+}
+function spawnImpactFx(x,z,nx=0,nz=1,speed=6,playerId=null){
+  const k=Math.min(1,speed/16), y=1.1;
+  // 金属碰撞火花：沿法线反弹方向喷溅，速度越大越猛
+  const n=Math.floor(10+k*14);
+  for(let i=0;i<n;i++){
+    const spread=(Math.random()-.5)*6;
+    sparkPool.spawn(x,y+Math.random()*.9,z,
+      nx*(2+Math.random()*6)+nz*spread, 1.5+Math.random()*4.5, nz*(2+Math.random()*6)-nx*spread,
+      .25+Math.random()*.3, 1,.85,.4);
+  }
+  dustFx.spawn(x,.4,z,{count:Math.floor(6+k*8),life:.8,spread:1.2,speed:2.4,up:1.2});
+  spawnDebris(x,1,z,Math.floor(2+k*4),4+k*5);
+  spawnImpactRing(x,z,0xffd9a0,false);
+  spawnCombatLight(x,1.6,z,2.5+k*3,.22,0xffc46b);
+  if(playerId===myId) cameraShake=Math.max(cameraShake,.12+k*.22);
 }
 function spawnExplosionFx(x,z,scale=1){
   const y=.9;
@@ -1461,9 +1514,11 @@ function updateTankVisuals(now){
     o.group.visible = !!alive;
     o.group.position.set(x, 0, z);
     o.group.rotation.y = yaw;
-    o.turret.rotation.y = tur;
     if(alive){
       const ud=o.group.userData;
+      if(ud.vibPhase==null) ud.vibPhase=Math.random()*Math.PI*2;
+      if(ud.wasAlive===false){ clearDents(o); } // 重生后车体翻新
+      ud.wasAlive=true;
       const frameDt=ud.lastT ? Math.max(.001,(now-ud.lastT)/1000) : .016;
       const dx=ud.lastX==null?0:x-ud.lastX, dz=ud.lastZ==null?0:z-ud.lastZ;
       const moved=Math.hypot(dx,dz);
@@ -1478,14 +1533,39 @@ function updateTankVisuals(now){
       ud.turnRate=(ud.turnRate||0)+(rawTurn-(ud.turnRate||0))*smoothing;
       ud.speed=speed;
       const accel=(speed-(ud.prevSpeed||0))/frameDt;
-      const targetPitch=Math.max(-.12,Math.min(.12,-accel*.006));
+      // 碾过小石块：按石块在车体系中的方位产生抬头/侧倾和抬升，模拟真实压过凸起物
+      let rockLift=0,rockPitch=0,rockRoll=0;
+      for(const rk of smallRocks){
+        const rdx=rk.x-x, rdz=rk.z-z, rd=Math.hypot(rdx,rdz);
+        if(rd>=rk.r) continue;
+        const overlap=1-rd/rk.r;
+        const cos=Math.cos(yaw),sin=Math.sin(yaw);
+        const fwd=rdx*sin+rdz*cos, side=rdx*cos-rdz*sin; // 石块在车体系中的前/侧向偏移
+        rockLift=Math.max(rockLift,overlap*rk.h);
+        rockPitch+=-Math.sign(fwd||.001)*overlap*.16;
+        rockRoll+=Math.sign(side||.001)*overlap*.13;
+      }
+      const targetPitch=Math.max(-.28,Math.min(.28,-accel*.006+rockPitch));
       // 转向侧倾 + 行进中的悬挂摇晃（摇晃项移植自 TankBlitz 悬挂颠簸）
       const sway=Math.sin((ud.travel||0)*1.9)*.02*Math.min(1,speed/7);
-      const targetRoll=Math.max(-.14,Math.min(.14,-ud.turnRate*speed*.006))+sway;
+      const targetRoll=Math.max(-.28,Math.min(.28,-ud.turnRate*speed*.006+sway+rockRoll));
       o.rig.rotation.x+=(targetPitch-o.rig.rotation.x)*Math.min(1,frameDt*7);
       o.rig.rotation.z+=(targetRoll-o.rig.rotation.z)*Math.min(1,frameDt*7);
       ud.travel=(ud.travel||0)+moved;
-      o.rig.position.y=Math.sin(ud.travel*3.1)*Math.min(.055,speed*.0035);
+      // 发动机抖动：怠速时微弱、随速度略增，幅度刻意压小——可感知但不晃眼
+      const vibAmp=.004+Math.min(.007,speed*.0005);
+      const vibY=Math.sin(now*.043+(ud.vibPhase||0))*vibAmp;
+      const vibR=Math.sin(now*.051+(ud.vibPhase||0)*1.3)*vibAmp*.55;
+      o.rig.position.y=Math.sin(ud.travel*3.1)*Math.min(.055,speed*.0035)+rockLift+vibY;
+      o.rig.rotation.z+=vibR;
+      // 炮塔惯性：有最高转速和加/减速过程，不再瞬时跟随鼠标（参考真实炮塔伺服）
+      if(ud.turCur==null || teleported){ ud.turCur=tur; ud.turVel=0; }
+      const TUR_MAX=3.4, TUR_ACC=16;
+      const turErr=normAng(tur-ud.turCur);
+      const turWant=Math.max(-TUR_MAX,Math.min(TUR_MAX,turErr*9));
+      ud.turVel+=Math.max(-TUR_ACC*frameDt,Math.min(TUR_ACC*frameDt,turWant-ud.turVel));
+      ud.turCur=normAng(ud.turCur+ud.turVel*frameDt);
+      o.turret.rotation.y=ud.turCur;
       for(const wheel of o.wheels) wheel.rotation.x-=moved*.82;
       for(const tex of o.trackTextures||[]) tex.offset.y-=(moved*.11)%1;
       ud.recoil=Math.max(0,(ud.recoil||0)-frameDt*5.4);
@@ -1520,6 +1600,7 @@ function updateTankVisuals(now){
       if(p.id===myId) localVisualSpeed=speed;
     }
     // 出生保护不再反复隐藏整辆坦克；只显示平滑光圈，避免画面闪烁。
+    if(!alive) o.group.userData.wasAlive=false;
     o.shield.visible = alive && (shield > 0 || invuln > 0);
     if(o.shield.visible) o.shield.material.opacity = invuln > 0 ? .2 : .14;
   }
@@ -1540,7 +1621,7 @@ function predictLocal(dt){
     const brake=Math.max(0,1-9*dt);pred.vx*=brake;pred.vz*=brake;
   }
   pred.x += pred.vx*dt; pred.z += pred.vz*dt;
-  localCollide(pred, 1.7);
+  localCollide(pred, 2.15);
   const speed=Math.hypot(pred.vx,pred.vz);
   if(speed>.1){
     const want = Math.atan2(pred.vx,pred.vz);
@@ -1662,6 +1743,13 @@ function handleEvent(e){
       const a=Math.random()*Math.PI*2,sp=2+Math.random()*4;
       sparkPool.spawn(e.x,.45,e.z,Math.cos(a)*sp,1.5+Math.random()*3,Math.sin(a)*sp,.4+Math.random()*.2,.75,.5,.25);
     }
+  }
+  // 坦克撞墙/撞障碍物/坦克互撞：火花、碎块、凹痕、震屏、金属撞击声
+  if(e.kind==='impact' && e.x!=null){
+    Sound.bump();
+    spawnImpactFx(e.x,e.z,e.nx||0,e.nz||1,e.speed||6,e.playerId);
+    const ids=e.playerIds||(e.playerId?[e.playerId]:[]);
+    for(const id of ids) addDent(id,e.x,e.z,e.nx||0,e.nz||1);
   }
   if(e.kind==='crash' && e.x!=null) banner(`${(e.playerNames||[]).join(' 与 ')} 对撞，同归于尽！`);
 }
@@ -1996,7 +2084,7 @@ function loop(){
       camera:{x:activeCamera.position.x,y:activeCamera.position.y,z:activeCamera.position.z},
     };
     // 调试钩子：?debug=1 时可直接触发特效，便于动效走查与自动化截图
-    window.__tankFx={explode:spawnExplosionFx,muzzle:spawnMuzzleFx};
+    window.__tankFx={explode:spawnExplosionFx,muzzle:spawnMuzzleFx,impact:spawnImpactFx,dent:addDent};
   }
 }
 loop();

@@ -33,6 +33,8 @@ const FIRE_SPEED = 60;
 const FIRE_CD = 0.32;
 const FIRE_CD_RAPID = 0.11;
 const HIT_R = 1.7;
+// 坦克物理碰撞半径：车模宽约 3.8、长约 4.7，取 2.15 让碰撞体积贴合真实车体（子弹命中判定仍用 HIT_R 保持手感）
+const TANK_R = 2.15;
 const SHIELD_R = 2.6;
 const ROUND_SECONDS = Number(process.env.ROUND_SECONDS) || 60;
 const GAMES_PER_MATCH = 10;
@@ -123,9 +125,15 @@ function roomCode() {
   for (let i = 0; i < 4; i++) s += chars[(Math.random() * chars.length) | 0];
   return s;
 }
-function collideObstacles(p, r) {
-  p.x = clamp(p.x, -A + r, A - r);
-  p.z = clamp(p.z, -A + r, A - r);
+function collideObstacles(p, r, hit) {
+  // hit（可选）：回传碰撞推挤方向（单位法线），供撞击事件使用
+  let nx = 0, nz = 0;
+  const px = clamp(p.x, -A + r, A - r);
+  if (px !== p.x) nx = px > p.x ? 1 : -1;
+  p.x = px;
+  const pz = clamp(p.z, -A + r, A - r);
+  if (pz !== p.z) nz = pz > p.z ? 1 : -1;
+  p.z = pz;
   for (const o of OBSTACLES) {
     const dx = p.x - o.x;
     const dz = p.z - o.z;
@@ -134,9 +142,14 @@ function collideObstacles(p, r) {
     if (Math.abs(dx) < gapX && Math.abs(dz) < gapZ) {
       const penX = gapX - Math.abs(dx);
       const penZ = gapZ - Math.abs(dz);
-      if (penX < penZ) p.x = o.x + (dx >= 0 ? 1 : -1) * gapX;
-      else p.z = o.z + (dz >= 0 ? 1 : -1) * gapZ;
+      if (penX < penZ) { p.x = o.x + (dx >= 0 ? 1 : -1) * gapX; nx = dx >= 0 ? 1 : -1; nz = 0; }
+      else { p.z = o.z + (dz >= 0 ? 1 : -1) * gapZ; nz = dz >= 0 ? 1 : -1; nx = 0; }
     }
+  }
+  if (hit && (nx || nz)) {
+    const l = hypot(nx, nz);
+    hit.nx = nx / l;
+    hit.nz = nz / l;
   }
   return p;
 }
@@ -910,6 +923,7 @@ class Room {
       p.shield = Math.max(0, p.shield - DT);
       p.rapid = Math.max(0, p.rapid - DT);
       p.fireCd = Math.max(0, p.fireCd - DT);
+      p.impactCd = Math.max(0, (p.impactCd || 0) - DT);
 
       const inp = p.input;
       let mx = inp.mx || 0;
@@ -930,9 +944,21 @@ class Room {
 
       const expectedX = p.x + (p.vx || 0) * DT;
       const expectedZ = p.z + (p.vz || 0) * DT;
-      const pos = collideObstacles({ x: expectedX, z: expectedZ }, 1.7);
+      const wallHit = {};
+      const pos = collideObstacles({ x: expectedX, z: expectedZ }, TANK_R, wallHit);
       p.x = pos.x;
       p.z = pos.z;
+      // 撞上墙壁/障碍物：记录撞击事件（客户端做火花/凹痕/震屏），速度越大效果越强
+      if (wallHit.nx != null && p.impactCd <= 0) {
+        const into = Math.abs((p.vx || 0) * wallHit.nx + (p.vz || 0) * wallHit.nz);
+        if (into > 4.5) {
+          p.impactCd = 0.35;
+          this.events.push({
+            kind: 'impact', playerId: p.id,
+            x: r2(p.x), z: r2(p.z), nx: r2(wallHit.nx), nz: r2(wallHit.nz), speed: r2(into),
+          });
+        }
+      }
       if (Math.abs(p.x - expectedX) > 0.01) p.vx *= -0.12;
       if (Math.abs(p.z - expectedZ) > 0.01) p.vz *= -0.12;
       const speed = hypot(p.vx || 0, p.vz || 0);
@@ -945,8 +971,8 @@ class Room {
           const dx = prop.x - p.x;
           const dz = prop.z - p.z;
           const d = hypot(dx, dz);
-          if (d >= 2.45) continue;
-          const force = 1 - d / 2.45;
+          if (d >= 2.9) continue;
+          const force = 1 - d / 2.9;
           const driveX = p.vx / Math.max(1, speed);
           const driveZ = p.vz / Math.max(1, speed);
           prop.vx += driveX * (12 + speed * 0.8 + force * 18);
@@ -1049,7 +1075,7 @@ class Room {
         const dx = b.x - a.x;
         const dz = b.z - a.z;
         const d = hypot(dx, dz);
-        const crashDistance = 2.45;
+        const crashDistance = 3.0;
         const rvx = (a.vx || 0) - (b.vx || 0);
         const rvz = (a.vz || 0) - (b.vz || 0);
         const relativeSpeed = hypot(rvx, rvz);
@@ -1076,21 +1102,30 @@ class Room {
           collisionThisTick = true;
           continue;
         }
-        const min = 3.2;
+        const min = TANK_R * 2 - 0.2;
         if (d < min && d > 0.01) {
           const push = ((min - d) / d) * 0.5;
           a.x -= dx * push;
           a.z -= dz * push;
           b.x += dx * push;
           b.z += dz * push;
-          collideObstacles(a, 1.7);
-          collideObstacles(b, 1.7);
+          collideObstacles(a, TANK_R);
+          collideObstacles(b, TANK_R);
           const nx = dx / d;
           const nz = dz / d;
           const aInto = (a.vx || 0) * nx + (a.vz || 0) * nz;
           const bInto = (b.vx || 0) * nx + (b.vz || 0) * nz;
           if (aInto > 0) { a.vx -= nx * aInto * 0.72; a.vz -= nz * aInto * 0.72; }
           if (bInto < 0) { b.vx -= nx * bInto * 0.72; b.vz -= nz * bInto * 0.72; }
+          // 不足以同归于尽的剐蹭/碰撞：发撞击事件，双方车体留凹痕
+          if (closingSpeed >= 5 && closingSpeed < CRASH_RELATIVE_SPEED && a.impactCd <= 0 && b.impactCd <= 0) {
+            a.impactCd = b.impactCd = 0.35;
+            this.events.push({
+              kind: 'impact', playerIds: [a.id, b.id],
+              x: r2((a.x + b.x) / 2), z: r2((a.z + b.z) / 2),
+              nx: r2(nx), nz: r2(nz), speed: r2(closingSpeed),
+            });
+          }
         }
       }
     }
