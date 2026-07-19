@@ -1220,16 +1220,31 @@ const FIXED_OBSTACLES = [
 ].map(([x,z,hw,hd,h])=>({x,z,hw,hd,h}));
 
 function localCollide(p, r){
-  p.x = Math.max(-A+r, Math.min(A-r, p.x));
-  p.z = Math.max(-A+r, Math.min(A-r, p.z));
-  for(const o of FIXED_OBSTACLES){
-    const dx=p.x-o.x, dz=p.z-o.z;
-    const gapX=o.hw+r, gapZ=o.hd+r;
-    if(Math.abs(dx)<gapX && Math.abs(dz)<gapZ){
-      const penX=gapX-Math.abs(dx), penZ=gapZ-Math.abs(dz);
-      if(penX<penZ) p.x=o.x+(dx>=0?1:-1)*gapX;
-      else p.z=o.z+(dz>=0?1:-1)*gapZ;
+  // 与服务器一致：前后双圆近似矩形车体，取陷入更深的采样圆的整份推挤，避免交替修正抖动
+  const fx=Math.sin(p.yaw||0), fz=Math.cos(p.yaw||0), off=1.2;
+  const outs=[];
+  for(const s of [1,-1]){
+    const pt={x:p.x+fx*off*s, z:p.z+fz*off*s};
+    pt.x = Math.max(-A+r, Math.min(A-r, pt.x));
+    pt.z = Math.max(-A+r, Math.min(A-r, pt.z));
+    for(const o of FIXED_OBSTACLES){
+      const dx=pt.x-o.x, dz=pt.z-o.z;
+      const gapX=o.hw+r, gapZ=o.hd+r;
+      if(Math.abs(dx)<gapX && Math.abs(dz)<gapZ){
+        const penX=gapX-Math.abs(dx), penZ=gapZ-Math.abs(dz);
+        if(penX<penZ) pt.x=o.x+(dx>=0?1:-1)*gapX;
+        else pt.z=o.z+(dz>=0?1:-1)*gapZ;
+      }
     }
+    outs.push({dx:pt.x-(p.x+fx*off*s), dz:pt.z-(p.z+fz*off*s)});
+  }
+  const pen0=Math.hypot(outs[0].dx,outs[0].dz), pen1=Math.hypot(outs[1].dx,outs[1].dz);
+  const worst=pen0>=pen1?0:1;
+  if(pen0>0||pen1>0){
+    p.x+=outs[worst].dx;
+    p.z+=outs[worst].dz;
+    p.x = Math.max(-A+1, Math.min(A-1, p.x));
+    p.z = Math.max(-A+1, Math.min(A-1, p.z));
   }
   return p;
 }
@@ -1300,7 +1315,8 @@ function connect(onOpen){
       document.getElementById('roomHud').textContent = roomCode + (isSpectator ? ' · 观战' : '');
       lobbyBox.classList.add('show');
       setErr(isSpectator ? '观战模式：开战后退下大厅即可看 Agent 操作' : '');
-      phase = 'lobby';
+      // 只有首次进房才落回大厅；观战断线重连时保持原画面，避免主界面与对战界面来回闪烁
+      if(phase==='menu' || !lastState) phase='lobby';
       pred.active = false;
       if(msg.obstacles){ setObstacles(msg.obstacles); obstaclesReady = true; }
       else if(!obstaclesReady){ setObstacles(FIXED_OBSTACLES); obstaclesReady = true; }
@@ -1545,10 +1561,13 @@ function updateTankVisuals(now){
         rockPitch+=-Math.sign(fwd||.001)*overlap*.16;
         rockRoll+=Math.sign(side||.001)*overlap*.13;
       }
-      const targetPitch=Math.max(-.28,Math.min(.28,-accel*.006+rockPitch));
+      // 加速俯仰/转向侧倾保持老版本的小幅度；碾石姿态在此基础上额外叠加
+      const basePitch=Math.max(-.12,Math.min(.12,-accel*.006));
+      const targetPitch=Math.max(-.3,Math.min(.3,basePitch+rockPitch));
       // 转向侧倾 + 行进中的悬挂摇晃（摇晃项移植自 TankBlitz 悬挂颠簸）
       const sway=Math.sin((ud.travel||0)*1.9)*.02*Math.min(1,speed/7);
-      const targetRoll=Math.max(-.28,Math.min(.28,-ud.turnRate*speed*.006+sway+rockRoll));
+      const baseRoll=Math.max(-.14,Math.min(.14,-ud.turnRate*speed*.006));
+      const targetRoll=Math.max(-.3,Math.min(.3,baseRoll+sway+rockRoll));
       o.rig.rotation.x+=(targetPitch-o.rig.rotation.x)*Math.min(1,frameDt*7);
       o.rig.rotation.z+=(targetRoll-o.rig.rotation.z)*Math.min(1,frameDt*7);
       ud.travel=(ud.travel||0)+moved;
@@ -1621,7 +1640,7 @@ function predictLocal(dt){
     const brake=Math.max(0,1-9*dt);pred.vx*=brake;pred.vz*=brake;
   }
   pred.x += pred.vx*dt; pred.z += pred.vz*dt;
-  localCollide(pred, 2.15);
+  localCollide(pred, 1.8);
   const speed=Math.hypot(pred.vx,pred.vz);
   if(speed>.1){
     const want = Math.atan2(pred.vx,pred.vz);
@@ -2282,7 +2301,9 @@ async function refreshAgentLobbyList(){
     } else {
       lines.push(`<div style="margin-top:6px;font-weight:800">状态：${r.phase} · 开战会自动 3D 观战</div>`);
     }
-    lobbyList.innerHTML = lines.join('');
+    // 内容不变就不重写 DOM，避免大厅列表每 1.2 秒重建导致界面闪烁
+    const lobbyHtml = lines.join('');
+    if(lobbyHtml !== lastLobbyHtml){ lobbyList.innerHTML = lobbyHtml; lastLobbyHtml = lobbyHtml; }
     btnStart.disabled = !(r.phase==='lobby' && n >= 2);
     btnStart.style.display = r.phase==='lobby' ? '' : 'none';
     btnStart.textContent = '手动开始（备用）';

@@ -33,8 +33,8 @@ const FIRE_SPEED = 60;
 const FIRE_CD = 0.32;
 const FIRE_CD_RAPID = 0.11;
 const HIT_R = 1.7;
-// 坦克物理碰撞半径：车模宽约 3.8、长约 4.7，取 2.15 让碰撞体积贴合真实车体（子弹命中判定仍用 HIT_R 保持手感）
-const TANK_R = 2.15;
+// 坦克物理碰撞半径：车模宽约 3.8、长约 4.7，用前后双圆（半径 1.8）贴合真实车体（子弹命中判定仍用 HIT_R 保持手感）
+const TANK_R = 1.8;
 const SHIELD_R = 2.6;
 const ROUND_SECONDS = Number(process.env.ROUND_SECONDS) || 60;
 const GAMES_PER_MATCH = 10;
@@ -150,6 +150,34 @@ function collideObstacles(p, r, hit) {
     const l = hypot(nx, nz);
     hit.nx = nx / l;
     hit.nz = nz / l;
+  }
+  return p;
+}
+
+// 坦克车体近似为前后两个圆（半径 TANK_R、间距 TANK_OFF*2）：
+// 车头/车尾都不允许陷入墙壁或障碍物，解决单圆碰撞导致的车角视觉穿插。
+// 修正方向取自陷入更深的那个采样圆（整份推挤一次施加），避免前后圆交替修正造成抖动。
+const TANK_OFF = 1.2;
+function collideTank(p, yaw, hit) {
+  const fx = Math.sin(yaw), fz = Math.cos(yaw);
+  const hits = [{}, {}];
+  const outs = [];
+  for (const s of [1, -1]) {
+    const i = s === 1 ? 0 : 1;
+    const pt = { x: p.x + fx * TANK_OFF * s, z: p.z + fz * TANK_OFF * s };
+    collideObstacles(pt, TANK_R, hits[i]);
+    outs.push({ dx: pt.x - (p.x + fx * TANK_OFF * s), dz: pt.z - (p.z + fz * TANK_OFF * s) });
+  }
+  const pen0 = hypot(outs[0].dx, outs[0].dz);
+  const pen1 = hypot(outs[1].dx, outs[1].dz);
+  const worst = pen0 >= pen1 ? 0 : 1;
+  if (pen0 > 0 || pen1 > 0) {
+    p.x += outs[worst].dx;
+    p.z += outs[worst].dz;
+    p.x = clamp(p.x, -A + 1, A - 1);
+    p.z = clamp(p.z, -A + 1, A - 1);
+    const src = hits[worst];
+    if (hit && src.nx != null) { hit.nx = src.nx; hit.nz = src.nz; }
   }
   return p;
 }
@@ -945,7 +973,7 @@ class Room {
       const expectedX = p.x + (p.vx || 0) * DT;
       const expectedZ = p.z + (p.vz || 0) * DT;
       const wallHit = {};
-      const pos = collideObstacles({ x: expectedX, z: expectedZ }, TANK_R, wallHit);
+      const pos = collideTank({ x: expectedX, z: expectedZ }, p.yaw || 0, wallHit);
       p.x = pos.x;
       p.z = pos.z;
       // 撞上墙壁/障碍物：记录撞击事件（客户端做火花/凹痕/震屏），速度越大效果越强
@@ -1102,17 +1130,30 @@ class Room {
           collisionThisTick = true;
           continue;
         }
-        const min = TANK_R * 2 - 0.2;
-        if (d < min && d > 0.01) {
-          const push = ((min - d) / d) * 0.5;
-          a.x -= dx * push;
-          a.z -= dz * push;
-          b.x += dx * push;
-          b.z += dz * push;
-          collideObstacles(a, TANK_R);
-          collideObstacles(b, TANK_R);
-          const nx = dx / d;
-          const nz = dz / d;
+        // 软分离：用前后双圆找最近的一对采样点，沿该方向推开，避免车体角对角穿插
+        let sepDx = dx, sepDz = dz, sepD = d;
+        const pts = [1, -1];
+        for (const sa of pts) {
+          const ax = a.x + Math.sin(a.yaw || 0) * TANK_OFF * sa;
+          const az = a.z + Math.cos(a.yaw || 0) * TANK_OFF * sa;
+          for (const sb of pts) {
+            const bx = b.x + Math.sin(b.yaw || 0) * TANK_OFF * sb;
+            const bz = b.z + Math.cos(b.yaw || 0) * TANK_OFF * sb;
+            const pdx = bx - ax, pdz = bz - az, pd = hypot(pdx, pdz);
+            if (pd < sepD) { sepD = pd; sepDx = pdx; sepDz = pdz; }
+          }
+        }
+        const min = TANK_R * 2;
+        if (sepD < min && sepD > 0.01) {
+          const nx = sepDx / sepD;
+          const nz = sepDz / sepD;
+          const push = ((min - sepD) / sepD) * 0.5;
+          a.x -= sepDx * push;
+          a.z -= sepDz * push;
+          b.x += sepDx * push;
+          b.z += sepDz * push;
+          collideTank(a, a.yaw || 0);
+          collideTank(b, b.yaw || 0);
           const aInto = (a.vx || 0) * nx + (a.vz || 0) * nz;
           const bInto = (b.vx || 0) * nx + (b.vz || 0) * nz;
           if (aInto > 0) { a.vx -= nx * aInto * 0.72; a.vz -= nz * aInto * 0.72; }
