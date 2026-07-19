@@ -24,6 +24,9 @@ const A = 55; // 战场半宽
 const MAX_PLAYERS = 8; // 小组可多于 4；仍可用 2 人开打
 const MIN_PLAYERS = 2;
 const PLAYER_SPEED = 16;
+const PLAYER_ACCEL = 7.5;
+const PLAYER_BRAKE = 9;
+const CRASH_RELATIVE_SPEED = 19;
 const PLAYER_MAX_HP = 3; // 被打 3 下出局
 const FIRE_DMG = 1; // 每发子弹 = 1 命
 const FIRE_SPEED = 60;
@@ -37,8 +40,9 @@ const ROUNDS_PER_GAME = 3;
 const ROUND_BREAK_SECONDS = Number(process.env.ROUND_BREAK_SECONDS) || 4;
 const COUNTDOWN_SECONDS = Number(process.env.COUNTDOWN_SECONDS) || 3;
 
-const COLORS = [0x35c463, 0x3dbbff, 0xffd54a, 0xff6ad5];
-const COLOR_NAMES = ['翠绿', '天蓝', '金黄', '玫红'];
+// 与前端程序化色板保持一致：低饱和军绿、陶土橙、钢蓝、赭金。
+const COLORS = [0x4f8d5c, 0xd85c41, 0x4f78a8, 0xd6aa3d];
+const COLOR_NAMES = ['军绿', '陶土橙', '钢蓝', '赭金'];
 // 对角优先分配：双人局分别出生在左下角和右上角，避免同边开局直接对射。
 // 四人局仍会使用全部四个角落。
 const SPAWNS = [
@@ -74,6 +78,33 @@ const OBSTACLES = (() => {
   }
   return list;
 })();
+
+// 可被坦克撞飞的轻型木箱。它们只提供动态反馈，不参与射线遮挡和胜负判定，
+// 因此不会改变既有对战平衡；位置与旋转仍由服务端同步，所有客户端看到一致结果。
+const CRATE_SPAWNS = [
+  [-10, -4], [12, 9], [-33, 18], [33, -16],
+  [-7, 34], [24, 31], [-35, -23], [5, -36],
+];
+
+function freshCrates() {
+  return CRATE_SPAWNS.map(([x, z], i) => ({
+    id: `crate-${i + 1}`,
+    kind: 'crate',
+    x,
+    y: 0.75,
+    z,
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    rx: 0,
+    ry: (i * 0.73) % (Math.PI * 2),
+    rz: 0,
+    vrx: 0,
+    vry: 0,
+    vrz: 0,
+    hitCd: 0,
+  }));
+}
 
 function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
@@ -134,10 +165,14 @@ function publicBase(req) {
 class Room {
   constructor(code) {
     this.code = code;
+    this.createdAt = Date.now();
+    this.lastTouchedAt = this.createdAt;
+    this.keepEmptyLobby = false;
     this.players = new Map();
     this.order = [];
     this.bullets = [];
     this.powerups = [];
+    this.props = freshCrates();
     this.state = 'lobby';
     this.countdown = 0;
     this.hostId = null;
@@ -218,6 +253,8 @@ class Room {
       slot,
       x: spawn.x,
       z: spawn.z,
+      vx: 0,
+      vz: 0,
       yaw: 0,
       turretYaw: 0,
       aimX: spawn.x,
@@ -295,6 +332,7 @@ class Room {
 
   maybeDestroyRoom() {
     if (this.players.size === 0 && this.spectators.size === 0) {
+      if (this.keepEmptyLobby && this.state === 'lobby') return;
       if (this.result) {
         resultArchive.set(this.code, { ...this.result, archivedAt: Date.now() });
       }
@@ -362,6 +400,9 @@ class Room {
           slot: p.slot,
           x: r2(p.x),
           z: r2(p.z),
+          vx: r2(p.vx || 0),
+          vz: r2(p.vz || 0),
+          speed: r2(hypot(p.vx || 0, p.vz || 0)),
           yaw: r2(p.yaw),
           turretYaw: r2(p.turretYaw),
           hp: Math.round(p.hp),
@@ -387,11 +428,23 @@ class Room {
             x: r2(b.x),
             y: 1.4,
             z: r2(b.z),
+            dx: r2(b.dx),
+            dz: r2(b.dz),
             ownerId: b.ownerId,
             color: b.color,
           }))
         : [],
       powerups: [], // 新规则下无系统补给，避免干扰积分
+      props: this.props.map((p) => ({
+        id: p.id,
+        kind: p.kind,
+        x: r2(p.x),
+        y: r2(p.y),
+        z: r2(p.z),
+        rx: r2(p.rx),
+        ry: r2(p.ry),
+        rz: r2(p.rz),
+      })),
       events: this.events.splice(0, this.events.length),
       result: this.state === 'finished' ? this.result : null,
       spectatorCount: this.spectators.size,
@@ -418,6 +471,9 @@ class Room {
             kind: you.kind,
             x: r2(you.x),
             z: r2(you.z),
+            vx: r2(you.vx || 0),
+            vz: r2(you.vz || 0),
+            speed: r2(hypot(you.vx || 0, you.vz || 0)),
             yaw: r2(you.yaw),
             turretYaw: r2(you.turretYaw),
             hp: Math.round(you.hp),
@@ -454,6 +510,8 @@ class Room {
       const sp = SPAWNS[i % SPAWNS.length];
       p.x = sp.x;
       p.z = sp.z;
+      p.vx = 0;
+      p.vz = 0;
       p.yaw = 0;
       p.turretYaw = 0;
       p.aimX = sp.x;
@@ -472,6 +530,7 @@ class Room {
     }
     this.bullets = [];
     this.powerups = [];
+    this.props = freshCrates();
   }
 
   /**
@@ -859,13 +918,58 @@ class Room {
       if (len > 0) {
         mx /= len;
         mz /= len;
-        p.x += mx * PLAYER_SPEED * DT;
-        p.z += mz * PLAYER_SPEED * DT;
-        const pos = collideObstacles({ x: p.x, z: p.z }, 1.7);
-        p.x = pos.x;
-        p.z = pos.z;
-        const wantYaw = Math.atan2(mx, mz);
-        p.yaw = p.yaw + normAngle(wantYaw - p.yaw) * Math.min(1, 10 * DT);
+        const blend = Math.min(1, PLAYER_ACCEL * DT);
+        p.vx += (mx * PLAYER_SPEED - (p.vx || 0)) * blend;
+        p.vz += (mz * PLAYER_SPEED - (p.vz || 0)) * blend;
+      } else {
+        const brake = Math.max(0, 1 - PLAYER_BRAKE * DT);
+        p.vx = (p.vx || 0) * brake;
+        p.vz = (p.vz || 0) * brake;
+        if (hypot(p.vx, p.vz) < 0.05) p.vx = p.vz = 0;
+      }
+
+      const expectedX = p.x + (p.vx || 0) * DT;
+      const expectedZ = p.z + (p.vz || 0) * DT;
+      const pos = collideObstacles({ x: expectedX, z: expectedZ }, 1.7);
+      p.x = pos.x;
+      p.z = pos.z;
+      if (Math.abs(p.x - expectedX) > 0.01) p.vx *= -0.12;
+      if (Math.abs(p.z - expectedZ) > 0.01) p.vz *= -0.12;
+      const speed = hypot(p.vx || 0, p.vz || 0);
+      if (speed > 0.1) {
+        const wantYaw = Math.atan2(p.vx, p.vz);
+        p.yaw = p.yaw + normAngle(wantYaw - p.yaw) * Math.min(1, (5 + speed * 0.25) * DT);
+
+        // 木箱是轻型动态道具：坦克保持原速度穿过，木箱获得冲量并腾空翻滚。
+        for (const prop of this.props) {
+          const dx = prop.x - p.x;
+          const dz = prop.z - p.z;
+          const d = hypot(dx, dz);
+          if (d >= 2.45) continue;
+          const force = 1 - d / 2.45;
+          const driveX = p.vx / Math.max(1, speed);
+          const driveZ = p.vz / Math.max(1, speed);
+          prop.vx += driveX * (12 + speed * 0.8 + force * 18);
+          prop.vz += driveZ * (12 + speed * 0.8 + force * 18);
+          prop.vy = Math.max(prop.vy, 3.8 + force * 4.5);
+          prop.vrx += -driveZ * (3.5 + force * 4);
+          prop.vrz += driveX * (3.5 + force * 4);
+          prop.vry += (driveX - driveZ) * 2.8;
+          if (prop.hitCd <= 0) {
+            prop.hitCd = 0.35;
+            this.events.push({
+              kind: 'prop_hit',
+              id: prop.id,
+              propKind: prop.kind,
+              x: r2(prop.x),
+              y: r2(prop.y),
+              z: r2(prop.z),
+              speed: r2(Math.hypot(prop.vx, prop.vz)),
+              playerId: p.id,
+            });
+            this.events.push({ kind: 'sfx', name: 'crate', x: r2(prop.x), z: r2(prop.z) });
+          }
+        }
       }
 
       p.aimX = inp.aimX;
@@ -896,7 +1000,40 @@ class Room {
           color: p.color,
         });
         p.fireCd = p.rapid > 0 ? FIRE_CD_RAPID : FIRE_CD;
-        this.events.push({ kind: 'sfx', name: 'shoot', x: mx0, z: mz0 });
+        this.events.push({ kind: 'sfx', name: 'shoot', playerId: p.id, x: mx0, z: mz0, dx, dz });
+      }
+    }
+
+    // 动态道具的轻量刚体积分：重力、地面反弹、摩擦、边界回弹。
+    for (const prop of this.props) {
+      prop.hitCd = Math.max(0, prop.hitCd - DT);
+      prop.x += prop.vx * DT;
+      prop.y += prop.vy * DT;
+      prop.z += prop.vz * DT;
+      prop.rx += prop.vrx * DT;
+      prop.ry += prop.vry * DT;
+      prop.rz += prop.vrz * DT;
+      prop.vy -= 18 * DT;
+      if (prop.y < 0.75) {
+        prop.y = 0.75;
+        if (prop.vy < -1.2) prop.vy *= -0.28;
+        else prop.vy = 0;
+        prop.vx *= 0.86;
+        prop.vz *= 0.86;
+        prop.vrx *= 0.8;
+        prop.vry *= 0.8;
+        prop.vrz *= 0.8;
+      } else {
+        prop.vx *= 0.992;
+        prop.vz *= 0.992;
+      }
+      if (Math.abs(prop.x) > A - 1) {
+        prop.x = clamp(prop.x, -A + 1, A - 1);
+        prop.vx *= -0.45;
+      }
+      if (Math.abs(prop.z) > A - 1) {
+        prop.z = clamp(prop.z, -A + 1, A - 1);
+        prop.vz *= -0.45;
       }
     }
 
@@ -913,11 +1050,16 @@ class Room {
         const dz = b.z - a.z;
         const d = hypot(dx, dz);
         const crashDistance = 2.45;
-        if (d < crashDistance && a.invuln <= 0 && b.invuln <= 0) {
+        const rvx = (a.vx || 0) - (b.vx || 0);
+        const rvz = (a.vz || 0) - (b.vz || 0);
+        const relativeSpeed = hypot(rvx, rvz);
+        const closingSpeed = d > 0.01 ? Math.abs((rvx * dx + rvz * dz) / d) : relativeSpeed;
+        if (d < crashDistance && relativeSpeed >= CRASH_RELATIVE_SPEED && closingSpeed >= CRASH_RELATIVE_SPEED * 0.62 && a.invuln <= 0 && b.invuln <= 0) {
           a.hp = 0;
           b.hp = 0;
           a.alive = false;
           b.alive = false;
+          a.vx = a.vz = b.vx = b.vz = 0;
           a.deaths = (a.deaths || 0) + 1;
           b.deaths = (b.deaths || 0) + 1;
           const crash = {
@@ -943,6 +1085,12 @@ class Room {
           b.z += dz * push;
           collideObstacles(a, 1.7);
           collideObstacles(b, 1.7);
+          const nx = dx / d;
+          const nz = dz / d;
+          const aInto = (a.vx || 0) * nx + (a.vz || 0) * nz;
+          const bInto = (b.vx || 0) * nx + (b.vz || 0) * nz;
+          if (aInto > 0) { a.vx -= nx * aInto * 0.72; a.vz -= nz * aInto * 0.72; }
+          if (bInto < 0) { b.vx -= nx * bInto * 0.72; b.vz -= nz * bInto * 0.72; }
         }
       }
     }
@@ -1177,6 +1325,7 @@ app.post('/api/v1/rooms', (req, res) => {
       code = roomCode();
     } while (rooms.has(code));
     const room = new Room(code);
+    room.keepEmptyLobby = true;
     rooms.set(code, room);
     const links = roomLinks(base, code, null, null);
     return res.json({
@@ -1239,9 +1388,11 @@ app.get('/api/v1/rooms/:code', (req, res) => {
     if (archived) return res.json({ ok: true, code, phase: 'finished', result: archived, archived: true });
     return res.status(404).json({ ok: false, err: '房间不存在' });
   }
+  room.lastTouchedAt = Date.now();
   res.json({
     ok: true,
     code,
+    spectateUrl: roomLinks(publicBase(req), code, null, null).spectateUrl,
     phase: room.state,
     hostId: room.hostId,
     players: [...room.players.values()].map((p) => ({
@@ -1536,6 +1687,12 @@ setInterval(() => {
   const now = Date.now();
   for (const [code, r] of resultArchive) {
     if (now - (r.archivedAt || r.finishedAt || 0) > RESULT_TTL_MS) resultArchive.delete(code);
+  }
+  for (const [code, room] of rooms) {
+    const staleEmptyLobby = room.keepEmptyLobby && room.state === 'lobby' &&
+      room.players.size === 0 && room.spectators.size === 0 &&
+      now - room.lastTouchedAt > RESULT_TTL_MS;
+    if (staleEmptyLobby) rooms.delete(code);
   }
 }, 60 * 1000);
 
