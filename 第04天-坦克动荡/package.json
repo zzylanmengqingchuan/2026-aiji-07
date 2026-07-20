@@ -1,0 +1,23 @@
+{
+  "name": "tank-trouble",
+  "version": "1.0.0",
+  "description": "坦克动荡：草原迷宫 1v1，炮弹遇墙反弹，支持人类与 Agent",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "screenshot:dev": "node scripts/screenshot-dev.mjs",
+    "test:motion": "node scripts/perf-motion.mjs"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "three": "^0.128.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.1"
+  }
+}
