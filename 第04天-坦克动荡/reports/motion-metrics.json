@@ -1,0 +1,29 @@
+{
+  "room": "J49K",
+  "sampleFrames": 180,
+  "averageFps": 55.1,
+  "p95FrameMs": 18.4,
+  "browserErrors": [],
+  "mazeSeed": 1,
+  "wallCount": 53,
+  "fixedCameraDrift": 0,
+  "maxBounceObserved": 1,
+  "selfKills": 5,
+  "rounds": 6,
+  "finalScore": [
+    {
+      "name": "测试甲",
+      "score": 5
+    },
+    {
+      "name": "测试乙",
+      "score": 0
+    }
+  ],
+  "render": {
+    "fps": 60,
+    "quality": "高",
+    "postFx": true,
+    "pixelRatio": 1
+  }
+}

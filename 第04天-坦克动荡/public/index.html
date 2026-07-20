@@ -180,9 +180,9 @@
     <i class="ember" style="--left:91%;--duration:10.8s;--delay:-1s;--drift:-34px"></i>
   </div>
   <div class="hero-copy">
-    <p class="kicker"><span>1v1 草原迷宫</span><span>炮弹反弹对决</span></p>
+    <p class="kicker"><span>1v1 空旷台球桌</span><span>反弹才致命</span></p>
     <h1>坦克动荡</h1>
-    <p class="tagline">TANK TROUBLE ARENA · 每把 3 血 · 炮弹撞墙镜面反弹（最多 3 次，会打到自己） · 击毁对方 +1 分 · 先拿 5 分赢整场 · 每把 60 秒换一张新迷宫</p>
+    <p class="tagline">TANK TROUBLE ARENA · 空旷台球桌 · 直射无效——炮弹撞墙反弹后才有杀伤力（最多弹 8 次 / 6 秒） · 每把 3 血 · 击毁对方 +1 分 · 先拿 5 分获胜</p>
     <div class="hero-chips"><span>固定俯瞰全场</span><span>人类联机</span><span>Agent 自主对战</span><span>全局观战</span></div>
   </div>
 
@@ -195,7 +195,7 @@
     <!-- 人类模式 -->
     <div class="mode-panel active" id="panelHuman">
       <h2>人类测试 <span class="badge">手动开局</span></h2>
-      <p class="hint">WASD 按屏幕方向移动；鼠标瞄准炮台；左键或空格开火。炮弹撞墙会反弹，小心别打死自己——自杀也算对方得分。</p>
+      <p class="hint">WASD 按屏幕方向移动；鼠标瞄准炮台；左键或空格开火。直射无效——炮弹撞墙反弹后才有杀伤力，小心别被自己的反弹弹打死。</p>
       <label>昵称</label>
       <input id="nameIn" maxlength="16" placeholder="你的名字">
       <label>房间码（加入别人的房时填）</label>
@@ -209,7 +209,7 @@
     <!-- Agent 模式 -->
     <div class="mode-panel" id="panelAgent">
       <h2>Agent 对战 <span class="badge">自动观战</span></h2>
-      <p class="hint">创建房间 → 复制文案发群给 Agent → 满 2 人自动开战 → 自动弹出固定俯瞰观战画面。1v1 反弹迷宫，先拿 5 分者胜。人不占选手位。</p>
+      <p class="hint">创建房间 → 复制文案发群给 Agent → 满 2 人自动开战 → 自动弹出固定俯瞰观战画面。1v1 空旷台球桌，直射无效、反弹才致命，先拿 5 分者胜。人不占选手位。</p>
       <label>你的备注名（可选）</label>
       <input id="agentHostName" maxlength="16" placeholder="例如：第3组房主">
       <div class="row">
@@ -671,11 +671,11 @@ for(let i=0;i<14;i++){
 }
 // （已移除漂浮云朵装饰：固定俯瞰机位下云会飘进战场上空，像白色异物遮挡视线）
 
-// ---------- 迷宫墙：以服务端下发的 walls 为唯一真相（kind: wall|house），mazeSeed 变化时整组重建 ----------
+// ---------- 迷宫墙/房屋构建函数（台球桌版服务端 walls 恒为空数组，mazeGroup 自然为空；构建函数保留待用，本版本不会被调用） ----------
 const mazeGroup = new THREE.Group();
 scene.add(mazeGroup);
-let mazeWalls = [];          // 服务端当前把的迷宫墙（本地预测碰撞也用同一份）
-let mazeSeedRendered = null; // 已渲染的迷宫种子，避免每帧重建
+let mazeWalls = [];          // 服务端下发的 walls（台球桌版恒为空；本地预测碰撞也用同一份）
+let mazeSeedRendered = null; // 已渲染的种子（台球桌版恒为 null），避免每帧重建
 
 // 共享砖纹贴图与材质：所有墙共用一份，靠每面 UV 缩放匹配砖块尺寸，避免几十份贴图克隆
 const brickTexBase = window.TankVisuals.createBrickTexture(THREE, 256);
@@ -1359,7 +1359,7 @@ function connect(onOpen){
       updateShareUI();
       if(isSpectator){
         const tagline = document.querySelector('.tagline');
-        if(tagline) tagline.textContent = '全局观战中 · 不占用选手位 · 固定斜俯瞰一次看清整座迷宫';
+        if(tagline) tagline.textContent = '全局观战中 · 不占用选手位 · 固定斜俯瞰一次看清整张台球桌';
       }
       return;
     }
@@ -1483,10 +1483,10 @@ function onState(s){
   const mayStop = ['countdown','playing','round_break'].includes(s.phase) && (!isSpectator || !!hostKey);
   document.getElementById('matchActions').classList.toggle('show', mayStop);
   if(s.phase==='countdown' && s.countdown>0){
-    banner(isSpectator ? ('观战 ' + s.countdown) : ('' + s.countdown));
+    if(performance.now()>=bannerLockUntil) banner(isSpectator ? ('观战 ' + s.countdown) : ('' + s.countdown));
   }
   if(s.phase==='round_break'){
-    banner('即将开始第 ' + ((s.round||0)+1) + ' 把 · 新迷宫生成中');
+    if(performance.now()>=bannerLockUntil) banner('即将开始第 ' + ((s.round||0)+1) + ' 把 · 回到对角出生点');
   }
 
   ensureTankMeshes(s.players);
@@ -1727,13 +1727,33 @@ function syncBullets(bullets){
       halo.rotation.x=Math.PI/2;
       m.add(core); m.add(halo);
       m.userData.color = color;
+      m.userData.lethal = null; // 尚未按"是否有杀伤力"着色
+      m.userData.haloScale = 1;
       scene.add(m);
       bulletMeshes.set(key, m);
+    }
+    // 直射无效规则下的可读性：未反弹（无杀伤力）= 亮色实心小火球 + 本色暗晕；
+    // 反弹过 >=1 次（有杀伤力）= 换炽红弹体 + 明显大光晕，一眼看出"这颗弹现在致命"。
+    const lethal = (b.bounces||0) >= 1;
+    if(m.userData.lethal !== lethal){
+      m.userData.lethal = lethal;
+      const core = m.children[0], halo = m.children[1];
+      if(lethal){
+        core.material.color.setHex(0xffb04a);
+        halo.material.color.setHex(0xff4a1f);
+        halo.material.opacity = .8;
+        m.userData.haloScale = 2.1;
+      }else{
+        core.material.color.setHex(0xfff1bf);
+        halo.material.color.setHex(m.userData.color);
+        halo.material.opacity = .3;
+        m.userData.haloScale = 1;
+      }
     }
     m.position.set(b.x, b.y||1.4, b.z);
     if(Number.isFinite(b.dx)&&Number.isFinite(b.dz))m.rotation.y=Math.atan2(b.dx,b.dz);
     const pulse = 1 + Math.sin(performance.now()*.018+i)*.14;
-    if(m.children[1]) m.children[1].scale.setScalar(pulse);
+    if(m.children[1]) m.children[1].scale.setScalar(pulse * (m.userData.haloScale||1));
   });
 }
 
@@ -1763,6 +1783,8 @@ function syncPowerups(list){
 
 function handleEvent(e){
   if(e.kind==='banner') banner(e.text);
+  // 对手中途逃离战场：顶部醒目提示（服务端同时也会发同文案 banner，双保险）
+  if(e.kind==='opponent_left') banner('您的对手已逃离战场');
   if(e.kind==='sfx'){
     if(e.name==='shoot'){ Sound.shoot(); if(e.x!=null)spawnMuzzleFx(e.playerId,e.x,e.z,e.dx,e.dz); }
     if(e.name==='hit') Sound.hit();
@@ -1798,7 +1820,7 @@ function handleEvent(e){
     if(e.id===myId){const overlay=document.getElementById('combatFlash');overlay.style.transition='none';overlay.style.opacity='.72';requestAnimationFrame(()=>{overlay.style.transition='opacity .46s';overlay.style.opacity='0';});cameraShake=Math.max(cameraShake,.18);}
   }
   if(e.kind==='prop_hit' && e.x!=null){
-    // 剐蹭震屏：迷宫窄道里会频繁触发，只给当事人轻微反馈，观战不震
+    // 剐蹭震屏：窄空间里会频繁触发，只给当事人轻微反馈，观战不震
     if(!isSpectator) cameraShake=Math.max(cameraShake,Math.min(.1,.03+(e.speed||0)*.003));
     dustFx.spawn(e.x,.35,e.z,{count:14,life:.85,spread:1.5,speed:3.4,up:1.6});
     for(let i=0;i<10;i++){
@@ -1817,10 +1839,16 @@ function handleEvent(e){
 }
 
 let bannerT = 0;
+let bannerLockUntil = 0; // 重要提示（对手逃离战场）展示期间，倒计时/把间 banner 不得覆盖
 function banner(text){
   bannerEl.textContent = text;
   bannerEl.style.opacity = 1;
-  bannerT = 1.6;
+  if(/逃离战场/.test(text)){
+    bannerT = 5;
+    bannerLockUntil = performance.now() + 4500;
+  }else{
+    bannerT = 1.6;
+  }
 }
 
 function updateHUD(s){
@@ -1840,7 +1868,7 @@ function updateHUD(s){
     const buffs = [];
     buffs.push('生命 '+me.hp+'/'+me.maxHp);
     buffs.push(`场上炮弹 ${s.bullets?.length||0}`);
-    buffs.push(`最多反弹 ${s.rules?.maxBounces||3} 次`);
+    buffs.push(`直射无效 · 反弹才致命 · 最多弹 ${s.rules?.maxBounces||8} 次`);
     if(me.invuln>0) buffs.push('出生保护');
     if(!me.alive) buffs.push('本把已出局');
     if(s.phase==='round_break') buffs.push('换图中');
@@ -2072,7 +2100,7 @@ function buildSharePack(){
       `5) playing 时循环 GET state + POST action (mx,mz,aimX,aimZ,fire)`,
       `6) 结束后 GET result 看 score 排名与战报`,
       ``,
-      `规则：1v1；每把 3 血；炮弹撞墙最多反弹 3 次且会误伤自己；死亡时对方 +1；先得 5 分获胜；每把 60 秒并更换迷宫。`,
+      `规则：1v1 空旷台球桌；直射无效——炮弹撞墙反弹至少 1 次后才有杀伤力（最多弹 8 次 / 存活 6 秒，会误伤自己）；每把 3 血；死亡时对方 +1；先得 5 分获胜；每把 60 秒。`,
       `完整说明：${o}/api/v1/docs`,
     ].join('\n');
   }

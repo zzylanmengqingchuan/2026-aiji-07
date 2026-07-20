@@ -1,12 +1,14 @@
 /**
- * Tank Trouble 式 1v1 反弹坦克对战服务端
+ * Tank Trouble 式 1v1 反弹坦克对战服务端（台球桌版）
  * 规则：
  * - 1v1：满 2 人自动开局；仅入房玩家/用户 Agent 互打，无系统 AI 兵
- * - 每人每把 3 血；被炮弹击中 -1，包括被自己反弹的炮弹击中
+ * - 空旷台球桌：±55 战场 + 四周边框墙（库边），无任何迷宫墙/房屋；固定对角出生点 (±38, ±38)
+ * - 直射无效：炮弹必须先撞过墙面（外框墙）至少 1 次才有杀伤力，未反弹的炮弹直接穿过坦克
+ * - 每人每把 3 血；被致命炮弹击中 -1，包括被自己反弹的炮弹击中
  * - 血尽死亡，对方 +1 分（自杀同样对方 +1）；死一个即把结束
  * - 先拿 5 分者赢整场；单把上限 60s，超时双方不得分进下一把
- * - 比分 4:4 后下一把为决胜把；每把重新生成迷宫（seed 存 room 上）
- * - 炮弹：每人同屏最多 3 发；CD 0.32s；每发最多反弹 3 次，存活 4 秒
+ * - 比分 4:4 后下一把为决胜把
+ * - 炮弹：每人同屏最多 3 发；CD 0.32s；每发最多反弹 8 次，存活 6 秒
  * - countdown 期间允许移动和开火
  * - Agent：REST /api/v1/* + WebSocket；保留人类网页
  */
@@ -15,7 +17,6 @@ const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 const { WebSocketServer } = require('ws');
-const { generateMaze } = require('./maze.js');
 
 const PORT = process.env.PORT || 3100;
 // 对战 20Hz；大厅更低频，省带宽
@@ -34,8 +35,8 @@ const FIRE_DMG = 1; // 每发子弹 = 1 血
 const FIRE_SPEED = 60;
 const FIRE_CD = 0.32;
 const MAX_ACTIVE_BULLETS = 3; // 每人同屏最多 3 发活跃弹
-const MAX_BOUNCES = 3; // 每发最多反弹 3 次
-const BULLET_LIFE = 4; // 子弹存活秒数
+const MAX_BOUNCES = 8; // 每发最多反弹 8 次
+const BULLET_LIFE = 6; // 子弹存活秒数
 const BULLET_R = 0.2; // 子弹半径（撞墙判定用）
 const MUZZLE_PROTECT = 0.5; // owner 出膛保护秒数，防止开炮瞬间自爆
 const HIT_R = 1.7;
@@ -51,10 +52,10 @@ const ACTION_RATE_LIMIT = 30;
 // 与前端程序化色板保持一致：低饱和军绿、陶土橙、钢蓝、赭金。
 const COLORS = [0x4f8d5c, 0xd85c41, 0x4f78a8, 0xd6aa3d];
 const COLOR_NAMES = ['军绿', '陶土橙', '钢蓝', '赭金'];
-// 大厅里（尚未生成迷宫）的默认出生位，与迷宫对角出生格一致
+// 台球桌版固定对角出生点；出生朝向在 resetPlayersForRound 里按点位算（面向场地中心）
 const DEFAULT_SPAWNS = [
-  { x: -50, z: -50 },
-  { x: 50, z: 50 },
+  { x: -38, z: -38 },
+  { x: 38, z: 38 },
 ];
 
 // 可被坦克撞飞的轻型木箱。它们只提供动态反馈，不参与射线遮挡和胜负判定，
@@ -180,7 +181,7 @@ function publicBase(req) {
 }
 
 class Room {
-  constructor(code, debugMazeSeed = null) {
+  constructor(code, debugMazeSeed = null) { // debugMazeSeed 保留兼容旧调用，台球桌版忽略
     this.code = code;
     this.createdAt = Date.now();
     this.lastTouchedAt = this.createdAt;
@@ -209,12 +210,9 @@ class Room {
     this.roundTimeLeft = ROUND_SECONDS;
     this.roundBreakLeft = 0;
     this.roundHistory = []; // 每把小结
-    this.mazeSeed = 0; // 当前把的迷宫种子
-    this.debugMazeSeed = debugMazeSeed !== null && debugMazeSeed !== undefined && debugMazeSeed !== '' && Number.isFinite(Number(debugMazeSeed))
-      ? (Number(debugMazeSeed) >>> 0)
-      : null;
-    this.walls = []; // 当前把的迷宫墙（AABB 列表，kind: wall|house）
-    this.spawns = DEFAULT_SPAWNS; // 当前把的两个对角出生点
+    this.mazeSeed = null; // 台球桌版不再生成迷宫：字段保留但固定 null（兼容旧客户端/调试参数）
+    this.walls = []; // 空旷台球桌：永远为空数组（只剩外框墙，由 ±A clamp 碰撞）
+    this.spawns = DEFAULT_SPAWNS; // 固定的两个对角出生点
     this.spectators = new Map(); // id -> { id, ws, name }
     this.hostKey = newToken(); // 空房/房主密钥，可用于 start
   }
@@ -341,11 +339,18 @@ class Room {
     this.events.push({ kind: 'banner', text: `${p.name} 离开` });
     this.maybeDestroyRoom();
     if (!rooms.has(this.code)) return;
-    // 对局中减员：离场视为负，留在场上的选手 +1 并结束本把
+    // 对局中（含把间）减员：离场视为负，留在场上的选手 +1 并结束本把。
+    // 注意"您的对手已逃离战场"banner 要在 endRound 之后推，保证它是最后一条 banner，
+    // 客户端顶部醒目提示不会被把结束文案覆盖。
+    const inMatch = ['playing', 'countdown', 'round_break'].includes(this.state);
     if (this.state === 'playing' || this.state === 'countdown') {
       const other = [...this.players.values()].find((x) => x.alive && !x.waitingNextRound);
       if (other) other.score = (other.score || 0) + 1;
       this.endRound('leave');
+    }
+    if (inMatch) {
+      this.events.push({ kind: 'opponent_left', name: p.name });
+      this.events.push({ kind: 'banner', text: '您的对手已逃离战场' });
     }
     // 大厅不足 2 人：保持等待（不会傻等第三人，只是等人凑齐 2 个再自动开）
   }
@@ -376,7 +381,7 @@ class Room {
     }
   }
 
-  /** full=true 时附带 arena 信息（walls/mazeSeed 每帧都带，把与把之间会变） */
+  /** full=true 时附带 arena 信息；walls 固定空数组、mazeSeed 固定 null（台球桌版，字段保留兼容） */
   snapshot(full = false) {
     const inGame =
       this.state === 'playing' ||
@@ -399,7 +404,8 @@ class Room {
         maxBounces: MAX_BOUNCES,
         bulletLife: BULLET_LIFE,
         fireCd: FIRE_CD,
-        ricochet: true, // 炮弹镜面反弹，含自伤
+        ricochet: true, // 炮弹撞边框墙镜面反弹，含自伤
+        directHitNoKill: true, // 直射无效：反弹 >=1 次的炮弹才有杀伤力
         noSystemBots: true,
       },
       round: this.round,
@@ -515,15 +521,10 @@ class Room {
     };
   }
 
-  /** 每一把开始：重新生成迷宫，房间里所有选手按对角出生点重摆 */
+  /** 每一把开始：空旷台球桌无需生成迷宫，所有选手回固定对角出生点、面向场地中心 */
   resetPlayersForRound() {
-    // 每把一张新迷宫：seed 存 room 上，同 seed 可复现同一张图
-    this.mazeSeed = this.debugMazeSeed == null
-      ? (Math.random() * 0xffffffff) >>> 0
-      : this.debugMazeSeed;
-    const maze = generateMaze(this.mazeSeed);
-    this.walls = maze.walls;
-    this.spawns = maze.spawns;
+    this.walls = [];
+    this.spawns = DEFAULT_SPAWNS;
     let i = 0;
     for (const id of this.order) {
       const p = this.players.get(id);
@@ -533,10 +534,11 @@ class Room {
       p.z = sp.z;
       p.vx = 0;
       p.vz = 0;
-      p.yaw = 0;
+      // 出生车体朝向场地中心（炮塔相对车体为 0，瞄准点也放到中心）
+      p.yaw = Math.atan2(-sp.x, -sp.z);
       p.turretYaw = 0;
-      p.aimX = sp.x;
-      p.aimZ = sp.z + 10;
+      p.aimX = 0;
+      p.aimZ = 0;
       p.hp = PLAYER_MAX_HP;
       p.maxHp = PLAYER_MAX_HP;
       p.alive = true;
@@ -648,6 +650,10 @@ class Room {
       }
     }
     if (endedEarly) highlights.push('本场由房主或选手主动提前结束，比分按停止时已结算分数生成');
+    const leaveRounds = this.roundHistory.filter((r) => r.reason === 'leave').length;
+    if (leaveRounds > 0) {
+      highlights.push(`有${leaveRounds}把因对手逃离战场直接结束（离场记负，对方 +1）`);
+    }
     return {
       title: `房间 ${this.code} 战斗回顾`,
       headline: leader ? `${leader.name}赢得本场 1v1 对决` : '本场对决结束',
@@ -681,7 +687,7 @@ class Room {
     return {
       code: this.code,
       phase: 'finished',
-      rules: `1v1反弹坦克：每把${PLAYER_MAX_HP}血，被炮弹击中-1（含自己的反弹弹）；死亡对方+1；先拿${WIN_SCORE}分赢整场；单把${ROUND_SECONDS}s，超时双方不得分；${WIN_SCORE - 1}:${WIN_SCORE - 1}后决胜把`,
+      rules: `1v1台球桌反弹坦克：每把${PLAYER_MAX_HP}血；直射无效，炮弹撞墙反弹至少1次后才致命（含自己的反弹弹）；死亡对方+1；先拿${WIN_SCORE}分赢整场；单把${ROUND_SECONDS}s，超时双方不得分；${WIN_SCORE - 1}:${WIN_SCORE - 1}后决胜把`,
       winnerId: top ? top.id : null,
       winnerName: top ? top.name : null,
       winnerKind: top ? top.kind : null,
@@ -758,6 +764,8 @@ class Room {
     let bannerText;
     if (reason === 'manual_stop') {
       bannerText = `比赛已提前结束 · ${scoreText}`;
+    } else if (reason === 'leave') {
+      bannerText = `第${this.round}把结束 · 对手已逃离战场（${scoreText}）`;
     } else if (scorer && deadOne) {
       bannerText = `第${this.round}把结束 · ${deadOne.name} 被击毁，${scorer.name} +1（${scoreText}）`;
     } else if (dead.length >= 2) {
@@ -802,13 +810,13 @@ class Room {
       return;
     }
     this.round += 1;
-    this.resetPlayersForRound(); // 含新迷宫与对角出生点重摆
+    this.resetPlayersForRound(); // 回固定对角出生点
     this.state = 'countdown';
     this.countdown = COUNTDOWN_SECONDS;
     this.roundTimeLeft = ROUND_SECONDS;
     this.events.push({
       kind: 'banner',
-      text: `第 ${this.round} 把 · ${this.players.size} 人 · 新迷宫已生成`,
+      text: `第 ${this.round} 把 · ${this.players.size} 人 · 对角重生`,
     });
   }
 
@@ -895,8 +903,10 @@ class Room {
           });
         }
       }
-      if (Math.abs(p.x - expectedX) > 0.01) p.vx *= -0.12;
-      if (Math.abs(p.z - expectedZ) > 0.01) p.vz *= -0.12;
+      // 被墙推挤后把指向墙内的速度分量清零（不反弹）。老版本 *= -0.12 让速度反向弹跳，
+      // 贴墙斜向滑行时每步都"狠狠撞一下"；清零后沿墙滑行顺滑无抖动。
+      if (Math.abs(p.x - expectedX) > 0.01) p.vx = 0;
+      if (Math.abs(p.z - expectedZ) > 0.01) p.vz = 0;
       const speed = hypot(p.vx || 0, p.vz || 0);
       if (speed > 0.1) {
         const wantYaw = Math.atan2(p.vx, p.vz);
@@ -1068,8 +1078,10 @@ class Room {
       b.age += DT;
       let dead = b.life <= 0;
       let hitP = null;
-      // 坦克命中判定：owner 也参与（自伤），但 owner 有出膛保护防止开炮瞬间自爆
+      // 坦克命中判定：owner 也参与（自伤），但 owner 有出膛保护防止开炮瞬间自爆。
+      // 直射无效：bounces<1 的炮弹没有杀伤力，直接穿过坦克（不掉血、无命中事件）。
       const hitTest = () => {
+        if (b.bounces < 1) return null;
         for (const p of this.players.values()) {
           if (!p.alive || p.waitingNextRound) continue;
           if (p.invuln > 0) continue;
@@ -1221,19 +1233,19 @@ function roomLinks(base, code, playerId, token) {
   const docsUrl = `${base}/api/v1/docs`;
   // Agent 负责 start；观战在开战后再看 3D
   const shareText = [
-    `【1v1 反弹坦克】房间号：${code}`,
+    `【1v1 台球桌反弹坦克】房间号：${code}`,
     `服务器：${base}`,
     ``,
     `把下面整段发给你的 Agent：`,
-    `你要作为选手加入 1v1 反弹坦克对战（不要只观战）。`,
+    `你要作为选手加入 1v1 台球桌反弹坦克对战（不要只观战）。`,
     `服务器 ${base}，房间 ${code}。`,
     `1) POST ${base}/api/v1/rooms/${code}/join`,
     `   {"name":"你的名字","kind":"agent","agentId":"唯一id"}`,
     `2) 保存 playerId、token`,
-    `3) 房间满 2 人会【自动开局】，每把自动换新迷宫`,
+    `3) 房间满 2 人会【自动开局】，固定对角出生`,
     `4) phase=playing 或 countdown 时循环 GET .../state 与 POST .../action (mx,mz,aimX,aimZ,fire)，action 限流 30 次/秒`,
     `5) 结束后 GET .../result 看比分与战报`,
-    `规则：1v1；每把3血，被炮弹击中-1（含自己的反弹弹）；死亡对方+1；先拿${WIN_SCORE}分赢整场；单把${ROUND_SECONDS}s超时双方不得分；炮弹撞墙镜面反弹（最多${MAX_BOUNCES}次、存活${BULLET_LIFE}s），每人同屏最多${MAX_ACTIVE_BULLETS}发；countdown 期间可移动开火。`,
+    `规则：1v1 空旷台球桌；直射无效——炮弹撞墙反弹至少 1 次后才有杀伤力（最多反弹${MAX_BOUNCES}次、存活${BULLET_LIFE}s，含自己的反弹弹）；每把3血；死亡对方+1；先拿${WIN_SCORE}分赢整场；单把${ROUND_SECONDS}s超时双方不得分；每人同屏最多${MAX_ACTIVE_BULLETS}发；countdown 期间可移动开火。`,
     `文档：${docsUrl}`,
   ].join('\n');
   return {
@@ -1269,10 +1281,10 @@ app.get('/health', (_req, res) =>
 
 app.get('/api/v1/docs', (_req, res) => {
   res.json({
-    name: 'Tank Trouble 1v1 反弹坦克 Agent API',
-    version: '2.0',
+    name: 'Tank Trouble 1v1 台球桌反弹坦克 Agent API',
+    version: '2.1',
     summary:
-      `1v1 迷宫反弹坦克对战。每把 ${PLAYER_MAX_HP} 血，被炮弹击中 -1（包括被自己反弹的炮弹击中）；血尽死亡对方 +1（自杀同样对方 +1）；先拿 ${WIN_SCORE} 分赢整场；单把 ${ROUND_SECONDS}s，超时双方不得分；${WIN_SCORE - 1}:${WIN_SCORE - 1} 后下一把为决胜把。每把重新生成迷宫。无系统AI兵。`,
+      `1v1 台球桌反弹坦克对战（空旷 ±55 场地 + 四周边框墙，无迷宫墙/房屋）。直射无效：炮弹撞墙反弹至少 1 次后才致命，最多反弹 ${MAX_BOUNCES} 次、存活 ${BULLET_LIFE} 秒。每把 ${PLAYER_MAX_HP} 血，被致命炮弹击中 -1（包括被自己反弹的炮弹击中）；血尽死亡对方 +1（自杀同样对方 +1）；先拿 ${WIN_SCORE} 分赢整场；单把 ${ROUND_SECONDS}s，超时双方不得分；${WIN_SCORE - 1}:${WIN_SCORE - 1} 后下一把为决胜把。无系统AI兵。`,
     rules: {
       maxHp: PLAYER_MAX_HP,
       winScore: WIN_SCORE,
@@ -1284,19 +1296,20 @@ app.get('/api/v1/docs', (_req, res) => {
         fireCd: FIRE_CD,
         maxBounces: MAX_BOUNCES,
         lifeSeconds: BULLET_LIFE,
-        selfHit: 'owner 也会被自己的弹击中（出膛 0.5s 保护除外）',
+        directHit: '直射无效：bounces>=1 的炮弹才有杀伤力；未反弹的炮弹穿过坦克，不掉血、无命中事件',
+        selfHit: 'owner 也会被自己的弹击中（出膛 0.5s 保护除外），同样要反弹过才致命',
       },
     },
     ricochet: {
       formula: "镜面反射：v' = v - 2(v·n)n，v 为入射方向 (dx,dz)，n 为撞击面单位法线",
-      note: '战场是 ±55 的正方形，内部墙/房屋为 AABB（axis-aligned bounding box）：{x,z,hw,hd}，法线只会是 (±1,0) 或 (0,±1)。',
+      note: '战场是 ±55 的正方形空旷台球桌，walls 固定为空数组；只有四周边框墙（x=±55 / z=±55，即台球桌库边），法线只会是 (±1,0) 或 (0,±1)。',
       agentTip:
-        '预判弹道：state.bullets 带 dx,dz（归一化方向）与 bounces。想打拐角后的对手，选一面墙让"入射角=反射角"：把墙法线 n 代入上式算 v\'，瞄准点取射线与墙的交点即可。反弹 3 次或 4 秒后子弹消失，远距离折射可能打不到；小心自己的反弹弹，自杀同样送对方 1 分。',
+        `预判弹道：state.bullets 带 dx,dz（归一化方向）与 bounces。想打对手，必须让炮弹先撞一次边框墙：把墙法线 n 代入上式算 v'，瞄准点取射线与墙的交点即可。直射无效——bounces=0 的炮弹会直接穿过坦克不造成伤害。反弹 ${MAX_BOUNCES} 次或 ${BULLET_LIFE} 秒后子弹消失；小心自己的反弹弹，自杀同样送对方 1 分。`,
     },
     stateFields: {
-      walls: '当前把迷宫墙列表 [{x,z,hw,hd,h,kind:"wall"|"house"}]，hw/hd 为半宽半深；每把会变，以 state 里的为准',
-      mazeSeed: '当前把迷宫种子（同 seed 可复现同一张图）',
-      'bullets[]': '{id,x,y,z,dx,dz,bounces,owner,color}：dx/dz 归一化方向，bounces 已反弹次数，owner 为射手 playerId',
+      walls: '固定为空数组 []（台球桌版无迷宫墙；仅外框墙，由 ±55 边界体现）',
+      mazeSeed: '固定 null（本版本不再生成迷宫）',
+      'bullets[]': '{id,x,y,z,dx,dz,bounces,owner,color}：dx/dz 归一化方向，bounces 已反弹次数（>=1 才致命），owner 为射手 playerId',
       'players[].score': '胜把数，先到 winScore 赢整场',
     },
     flow: [
@@ -1776,8 +1789,8 @@ setInterval(() => {
 }, 1000 / TICK_HZ);
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Tank Trouble 1v1 反弹坦克服务已启动`);
+  console.log(`Tank Trouble 1v1 台球桌反弹坦克服务已启动`);
   console.log(`本机:  http://localhost:${PORT}`);
-  console.log(`规则: 1v1 · 每把${PLAYER_MAX_HP}血 · 死亡对方+1（含自杀） · 先拿${WIN_SCORE}分赢 · 单把${ROUND_SECONDS}s · 炮弹最多反弹${MAX_BOUNCES}次`);
+  console.log(`规则: 1v1 空旷台球桌 · 直射无效（反弹≥1次才致命） · 每把${PLAYER_MAX_HP}血 · 死亡对方+1（含自杀） · 先拿${WIN_SCORE}分赢 · 单把${ROUND_SECONDS}s · 炮弹最多反弹${MAX_BOUNCES}次/存活${BULLET_LIFE}s`);
   console.log(`Agent文档: http://localhost:${PORT}/api/v1/docs`);
 });

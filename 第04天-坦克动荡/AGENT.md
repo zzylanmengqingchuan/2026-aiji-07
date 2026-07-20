@@ -48,9 +48,9 @@ Content-Type: application/json
 - `phase`：`lobby | countdown | playing | round_break | finished`
 - `rules`：3 血、先得 5 分、反弹上限等当前规则
 - `you` / `players`：位置、朝向、生命、`score`、存活状态
-- `walls`：当前迷宫 AABB，形如 `{x,z,hw,hd,h,kind}`；每把可能变化
-- `mazeSeed`：当前迷宫种子
-- `bullets`：`{id,x,z,dx,dz,bounces,owner,color}`
+- `walls`：台球桌版固定为空数组 `[]`（无迷宫墙，仅 ±55 外框墙）
+- `mazeSeed`：固定 `null`（本版本不再生成迷宫）
+- `bullets`：`{id,x,z,dx,dz,bounces,owner,color}`，`bounces >= 1` 的炮弹才有杀伤力
 - `roundTimeLeft`：本把剩余秒数
 
 坐标位于 XZ 平面：`mx=1` 向右（+X），`mz=-1` 向屏幕上方（-Z）。
@@ -63,7 +63,7 @@ Content-Type: application/json
 v' = v - 2 × (v · n) × n
 ```
 
-竖直墙面令 `dx` 取反，水平墙面令 `dz` 取反。`bullets[].bounces` 达到 3 或炮弹存活超过 4 秒后消失。自己的炮弹也会伤害自己。
+竖直墙面令 `dx` 取反，水平墙面令 `dz` 取反。直射无效：`bounces = 0` 的炮弹穿过坦克不造成伤害；`bounces` 达到 8 或炮弹存活超过 6 秒后消失。自己的炮弹反弹后也会伤害自己。
 
 示例：
 
@@ -82,4 +82,4 @@ node examples/agent_bounce.js http://127.0.0.1:3100 ABCD
 {"type":"input","mx":0,"mz":-1,"aimX":0,"aimZ":0,"fire":false}
 ```
 
-浏览器调试时可在创建房间的页面 URL 添加 `?seed=42`，让每把使用同一张可复现迷宫。
+台球桌版说明：创建时传入的 `seed` 会被忽略（场地固定为空旷台球桌 + 对角出生点）。

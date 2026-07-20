@@ -1,7 +1,7 @@
 {
   "name": "tank-trouble",
   "version": "1.0.0",
-  "description": "坦克动荡：草原迷宫 1v1，炮弹遇墙反弹，支持人类与 Agent",
+  "description": "坦克动荡：台球桌 1v1 反弹坦克——直射无效，炮弹撞墙反弹后才致命，支持人类与 Agent",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
