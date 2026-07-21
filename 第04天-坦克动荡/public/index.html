@@ -154,7 +154,7 @@
 <canvas id="c"></canvas>
 <div id="hud" class="hidden">
   <div id="topleft">
-    <div id="stats">房间 <b id="roomHud">----</b> · 第 <b id="roundHud">-</b> 把 · ⏱ <b id="timeHud">60</b> 秒</div>
+    <div id="stats">房间 <b id="roomHud">----</b> · 第 <b id="roundHud">-</b> 把 · ⏱ <b id="timeHud">5:00</b></div>
     <div id="hpbar"><div id="hpfill"></div></div>
     <div id="buffs"></div>
     <div id="plist"></div>
@@ -1801,6 +1801,11 @@ function handleEvent(e){
   if(e.kind==='banner') banner(e.text);
   // 对手中途逃离战场：顶部醒目提示（服务端同时也会发同文案 banner，双保险）
   if(e.kind==='opponent_left') banner('您的对手已逃离战场');
+  // 直射穿透：我的炮弹没撞墙就穿过对手——提示"直射无效"，并给一个小白圈标出穿透点
+  if(e.kind==='no_effect' && e.x!=null){
+    if(e.ownerId===myId) noEffectHintUntil = performance.now()+2200;
+    spawnImpactRing(e.x,e.z,0xffffff,false);
+  }
   if(e.kind==='sfx'){
     if(e.name==='shoot'){ Sound.shoot(); if(e.x!=null)spawnMuzzleFx(e.playerId,e.x,e.z,e.dx,e.dz); }
     if(e.name==='hit') Sound.hit();
@@ -1856,6 +1861,7 @@ function handleEvent(e){
 
 let bannerT = 0;
 let bannerLockUntil = 0; // 重要提示（对手逃离战场）展示期间，倒计时/把间 banner 不得覆盖
+let noEffectHintUntil = 0; // "直射无效"提示的展示截止时间
 function banner(text){
   bannerEl.textContent = text;
   bannerEl.style.opacity = 1;
@@ -1872,7 +1878,8 @@ function updateHUD(s){
   const rh = document.getElementById('roundHud');
   const th = document.getElementById('timeHud');
   if(rh) rh.textContent = s.round || '-';
-  if(th) th.textContent = Math.ceil(s.roundTimeLeft != null ? s.roundTimeLeft : 60);
+  const secs = Math.max(0, Math.ceil(s.roundTimeLeft != null ? s.roundTimeLeft : 300));
+  if(th) th.textContent = Math.floor(secs/60) + ':' + String(secs%60).padStart(2,'0');
   const ordered = s.players.slice().sort((a,b)=>(b.score||0)-(a.score||0));
   const mine = me || ordered[0];
   const opponent = ordered.find(p=>!mine || p.id!==mine.id);
@@ -1883,6 +1890,7 @@ function updateHUD(s){
     document.getElementById('hpfill').style.width = Math.max(0, me.hp/me.maxHp*100)+'%';
     const buffs = [];
     buffs.push('生命 '+me.hp+'/'+me.maxHp);
+    if(performance.now()<noEffectHintUntil) buffs.push('⚠ 直射无效！炮弹需先撞墙反弹');
     buffs.push(`场上炮弹 ${s.bullets?.length||0}`);
     buffs.push(`直射无效 · 反弹才致命 · 最多弹 ${s.rules?.maxBounces||8} 次`);
     if(me.invuln>0) buffs.push('出生保护');
@@ -2116,7 +2124,7 @@ function buildSharePack(){
       `5) playing 时循环 GET state + POST action (mx,mz,aimX,aimZ,fire)`,
       `6) 结束后 GET result 看 score 排名与战报`,
       ``,
-      `规则：1v1 空旷台球桌；直射无效——炮弹撞墙反弹至少 1 次后才有杀伤力（最多弹 8 次 / 存活 6 秒，会误伤自己）；每把 3 血；死亡时对方 +1；先得 5 分获胜；每把 60 秒。`,
+      `规则：1v1 空旷台球桌；直射无效——炮弹撞墙反弹至少 1 次后才有杀伤力（最多弹 8 次 / 存活 6 秒，会误伤自己）；每把 3 血；死亡时对方 +1；先得 5 分获胜；每把 5 分钟。`,
       `完整说明：${o}/api/v1/docs`,
     ].join('\n');
   }
