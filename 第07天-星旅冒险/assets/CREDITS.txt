@@ -1,0 +1,13 @@
+素材来源与许可
+==============
+
+本目录下的图片素材来自 Kenney（https://kenney.nl），均采用
+Creative Commons CC0（公共领域）许可，可自由用于任何用途，无需署名：
+
+- Platformer Art Deluxe（角色、敌人、瓦片、道具、HUD 爱心）
+  https://opengameart.org/content/platformer-art-deluxe
+- Background Elements Redux（远山背景层）
+  https://kenney.nl/assets/background-elements-redux
+
+音效为代码内 Web Audio API 实时合成，无外部音频文件。
+游戏名称、角色名与关卡设计为本项目原创。

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>星旅冒险 · Star Trail Adventure</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game"></canvas>
+
+    <!-- 顶部 HUD：分数 / 星币 / 生命 / 时间 / 关卡 / 进度 -->
+    <div id="hud" class="hidden">
+      <div class="hud-item"><span class="hud-label">分数</span><span id="hud-score">0</span></div>
+      <div class="hud-item"><span class="hud-icon">★</span><span id="hud-coins">0</span></div>
+      <div class="hud-item"><span class="hud-icon">❤</span><span id="hud-lives">3</span></div>
+      <div class="hud-item"><span class="hud-label">时间</span><span id="hud-time">300</span></div>
+      <div class="hud-item"><span class="hud-label">关卡</span><span id="hud-level">1-1</span></div>
+      <div class="hud-item hud-progress">
+        <span class="hud-label">进度</span>
+        <div id="hud-progress"><div id="hud-progress-fill"></div><div id="hud-progress-flag">🚩</div></div>
+      </div>
+    </div>
+
+    <!-- 竖屏提示 -->
+    <div id="rotate-hint">
+      <div class="rotate-phone">📱</div>
+      <p>建议旋转手机，横屏体验更佳</p>
+    </div>
+
+    <!-- 移动端触控按钮 -->
+    <div id="touch-controls">
+      <div class="touch-cluster touch-left-cluster">
+        <button id="touch-left" class="touch-btn" aria-label="向左">◀</button>
+        <button id="touch-right" class="touch-btn" aria-label="向右">▶</button>
+      </div>
+      <div class="touch-cluster touch-right-cluster">
+        <button id="touch-fire" class="touch-btn touch-btn-fire hidden" aria-label="发射能量球">✦</button>
+        <button id="touch-jump" class="touch-btn touch-btn-jump" aria-label="跳跃">▲</button>
+      </div>
+    </div>
+
+    <!-- 开始界面 -->
+    <div id="screen-start" class="screen">
+      <div class="panel">
+        <h1 class="game-title">星旅冒险</h1>
+        <p class="game-subtitle">Star Trail Adventure · 小绿的星币之旅</p>
+        <button id="btn-start" class="btn btn-primary">开始游戏</button>
+        <div class="help-box">
+          <p><b>电脑操作</b></p>
+          <p>A / ← 向左　D / → 向右</p>
+          <p>W / 空格 / ↑ 跳跃（长按跳得更高）</p>
+          <p>J / K 发射能量球（获得火焰能量后）</p>
+          <p>P 暂停　R 重新开始</p>
+          <p><b>手机操作</b></p>
+          <p>左下角移动，右下角跳跃</p>
+        </div>
+        <div class="btn-row">
+          <button id="btn-sound" class="btn btn-small">音效：开</button>
+          <button id="btn-fullscreen" class="btn btn-small">全屏</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 暂停界面 -->
+    <div id="screen-pause" class="screen hidden">
+      <div class="panel">
+        <h2>已暂停</h2>
+        <p>按 P 继续游戏</p>
+        <button id="btn-resume" class="btn btn-primary">继续</button>
+        <button id="btn-pause-restart" class="btn">重新开始</button>
+      </div>
+    </div>
+
+    <!-- 游戏结束界面 -->
+    <div id="screen-over" class="screen hidden">
+      <div class="panel">
+        <h2>游戏结束</h2>
+        <p class="stat-line">最终得分：<b id="over-score">0</b></p>
+        <p class="stat-line">收集星币：<b id="over-coins">0</b></p>
+        <p class="stat-line">游戏用时：<b id="over-time">0</b> 秒</p>
+        <button id="btn-over-restart" class="btn btn-primary">重新开始</button>
+      </div>
+    </div>
+
+    <!-- 通关界面 -->
+    <div id="screen-clear" class="screen hidden">
+      <div class="panel">
+        <h2 class="clear-title">🎉 通关成功！</h2>
+        <p class="stat-line">最终得分：<b id="clear-score">0</b></p>
+        <p class="stat-line">通关时间：<b id="clear-time">0</b> 秒</p>
+        <button id="btn-clear-restart" class="btn btn-primary">重新挑战</button>
+        <button id="btn-next-level" class="btn" disabled>下一关（开发中）</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

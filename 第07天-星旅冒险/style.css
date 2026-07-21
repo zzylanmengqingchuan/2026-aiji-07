@@ -1,0 +1,255 @@
+/* ============ 星旅冒险 · 全局样式 ============ */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0b1020;
+  font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  /* 禁止触摸滚动与缩放 */
+  touch-action: none;
+  position: fixed;
+  inset: 0;
+}
+
+#game-container {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 40%, #16224a 0%, #0b1020 70%);
+}
+
+#game {
+  display: block;
+  /* 实际尺寸由 JS 根据窗口与 16:9 比例计算 */
+  image-rendering: auto;
+  border-radius: 6px;
+  box-shadow: 0 12px 60px rgba(0, 0, 0, 0.55);
+}
+
+.hidden { display: none !important; }
+
+/* ============ 顶部 HUD ============ */
+#hud {
+  position: absolute;
+  top: max(8px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 7px 16px;
+  background: rgba(10, 18, 40, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  backdrop-filter: blur(6px);
+  color: #fff;
+  font-size: 15px;
+  z-index: 20;
+  white-space: nowrap;
+}
+
+.hud-item { display: flex; align-items: center; gap: 5px; }
+.hud-label { color: #9db4e8; font-size: 12px; }
+.hud-icon { color: #ffd94d; }
+.hud-item span:last-child { font-weight: 700; min-width: 2ch; text-align: left; font-variant-numeric: tabular-nums; }
+
+.hud-progress { min-width: 150px; }
+#hud-progress {
+  position: relative;
+  width: 110px;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  overflow: visible;
+}
+#hud-progress-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #37d67a, #a5f36b);
+  transition: width 0.15s linear;
+}
+#hud-progress-flag {
+  position: absolute;
+  right: -6px;
+  top: -9px;
+  font-size: 13px;
+}
+
+/* ============ 竖屏旋转提示 ============ */
+#rotate-hint {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  background: rgba(8, 12, 28, 0.92);
+  color: #fff;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  font-size: 18px;
+  text-align: center;
+}
+.rotate-phone { font-size: 56px; animation: rotateHint 1.6s ease-in-out infinite; }
+@keyframes rotateHint {
+  0%, 20% { transform: rotate(0deg); }
+  60%, 100% { transform: rotate(90deg); }
+}
+/* 仅触屏设备竖屏时显示 */
+@media (orientation: portrait) and (pointer: coarse) {
+  #rotate-hint { display: flex; }
+}
+
+/* ============ 移动端触控按钮 ============ */
+#touch-controls { display: none; }
+@media (pointer: coarse) {
+  #touch-controls { display: block; }
+}
+
+.touch-cluster {
+  position: absolute;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  display: flex;
+  gap: 14px;
+  z-index: 30;
+}
+.touch-left-cluster { left: max(18px, env(safe-area-inset-left)); }
+.touch-right-cluster { right: max(18px, env(safe-area-inset-right)); }
+
+.touch-btn {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 26px;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), inset 0 2px 6px rgba(255, 255, 255, 0.25);
+  touch-action: none;
+}
+.touch-btn:active, .touch-btn.pressed {
+  background: rgba(255, 255, 255, 0.34);
+  transform: scale(0.94);
+}
+.touch-btn-jump {
+  width: 80px;
+  height: 80px;
+  background: rgba(255, 120, 90, 0.30);
+  border-color: rgba(255, 170, 140, 0.6);
+}
+.touch-btn-jump:active, .touch-btn-jump.pressed {
+  background: rgba(255, 120, 90, 0.5);
+}
+.touch-btn-fire {
+  background: rgba(122, 212, 255, 0.28);
+  border-color: rgba(160, 226, 255, 0.6);
+  color: #cfeeff;
+}
+.touch-btn-fire:active, .touch-btn-fire.pressed {
+  background: rgba(122, 212, 255, 0.5);
+}
+
+/* ============ 菜单界面 ============ */
+.screen {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 12, 28, 0.62);
+  backdrop-filter: blur(3px);
+}
+
+.panel {
+  background: linear-gradient(160deg, rgba(30, 44, 88, 0.95), rgba(16, 24, 52, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 18px;
+  padding: 32px 44px;
+  text-align: center;
+  color: #eaf0ff;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.6);
+  max-width: min(92vw, 480px);
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+.game-title {
+  font-size: 46px;
+  letter-spacing: 8px;
+  background: linear-gradient(180deg, #ffe37a, #ff9d4d);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 4px 24px rgba(255, 170, 60, 0.35);
+  margin-bottom: 6px;
+}
+.game-subtitle { color: #9db4e8; font-size: 14px; margin-bottom: 22px; }
+
+h2 { font-size: 30px; margin-bottom: 14px; }
+.clear-title { color: #7bf0a2; }
+
+.btn {
+  display: block;
+  width: 100%;
+  margin: 10px auto 0;
+  padding: 12px 26px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.12s, background 0.12s;
+}
+.btn:hover { background: rgba(255, 255, 255, 0.22); transform: translateY(-1px); }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: linear-gradient(180deg, #ff9d4d, #f0683a);
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 6px 20px rgba(240, 104, 58, 0.45);
+}
+.btn-primary:hover { background: linear-gradient(180deg, #ffae66, #ff7a4a); }
+
+.btn-small { width: auto; display: inline-block; padding: 8px 18px; font-size: 14px; margin: 14px 6px 0; }
+
+.help-box {
+  margin-top: 20px;
+  padding: 14px 18px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: #c6d4f5;
+  text-align: left;
+}
+.help-box b { color: #ffe37a; }
+
+.stat-line { font-size: 17px; margin: 8px 0; color: #c6d4f5; }
+.stat-line b { color: #ffe37a; font-size: 20px; }
+
+/* 小屏幕适配：压缩面板 */
+@media (max-height: 480px) {
+  .panel { padding: 18px 26px; }
+  .game-title { font-size: 32px; }
+  .help-box { font-size: 12px; line-height: 1.6; margin-top: 10px; }
+  #hud { font-size: 12px; gap: 8px; padding: 5px 10px; }
+  .hud-progress { min-width: 90px; }
+  #hud-progress { width: 70px; }
+}
