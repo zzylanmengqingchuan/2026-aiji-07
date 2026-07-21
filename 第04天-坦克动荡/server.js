@@ -10,7 +10,7 @@
  * - 先拿 5 分者赢整场；单把上限 60s，超时双方不得分进下一把
  * - 比分 4:4 后下一把为决胜把
  * - 炮弹：每人同屏最多 3 发；CD 0.32s；每发最多反弹 8 次，存活 6 秒
- * - countdown 期间允许移动和开火
+ * - countdown 期间全场冻结，倒计时结束双方同时开打
  * - Agent：REST /api/v1/* + WebSocket；保留人类网页
  */
 const http = require('http');
@@ -36,7 +36,7 @@ const PLAYER_MAX_HP = 3; // 每把 3 血，被打 3 下出局
 const FIRE_DMG = 1; // 每发子弹 = 1 血
 const FIRE_SPEED = 60;
 const FIRE_CD = 0.32;
-const MAX_ACTIVE_BULLETS = 3; // 每人同屏最多 3 发活跃弹
+const MAX_ACTIVE_BULLETS = 5; // 每人同屏最多 5 发活跃弹（超出时挤掉最早一发，开火不阻塞）
 const MAX_BOUNCES = 8; // 每发最多反弹 8 次
 const BULLET_LIFE = 6; // 子弹存活秒数
 const BULLET_R = 0.2; // 子弹半径（撞墙判定用）
@@ -850,20 +850,14 @@ class Room {
   }
 
   tick() {
-    // 系统 AI 车长：与人类同规则——countdown/playing/round_break 都照算输入存进 p.input，
-    // 由下方玩家循环照常消费（round_break 循环不跑，输入自然不生效；tick 只在上述三种状态被调用）
-    for (const p of this.players.values()) {
-      if (p.isBot) computeBotInput(this, p, DT);
-    }
     if (this.state === 'round_break') {
       this.roundBreakLeft -= DT;
       if (this.roundBreakLeft <= 0) this.beginNextRound();
       return;
     }
-    if (this.state !== 'playing' && this.state !== 'countdown') return;
-
     if (this.state === 'countdown') {
-      // countdown 期间允许移动和开火：只跳过大把倒计时，模拟照常往下走
+      // 倒计时期间全场冻结：不能移动、不能开火、bot 也不行动，
+      // 倒计时归零双方从同一秒开打（否则 AI 会在人类还被倒计时时抢先开炮）
       this.countdown -= DT;
       if (this.countdown <= 0) {
         this.state = 'playing';
@@ -873,14 +867,20 @@ class Room {
         });
         this.events.push({ kind: 'sfx', name: 'wave' });
       }
-    } else {
-      // 大把倒计时
-      this.roundTimeLeft -= DT;
-      if (this.roundTimeLeft <= 0) {
-        this.roundTimeLeft = 0;
-        this.endRound('time_up');
-        return;
-      }
+      return;
+    }
+    if (this.state !== 'playing') return;
+
+    // 系统 AI 车长：与真人同规则——只在 playing 阶段计算输入，由下方玩家循环消费
+    for (const p of this.players.values()) {
+      if (p.isBot) computeBotInput(this, p, DT);
+    }
+    // 大把倒计时
+    this.roundTimeLeft -= DT;
+    if (this.roundTimeLeft <= 0) {
+      this.roundTimeLeft = 0;
+      this.endRound('time_up');
+      return;
     }
 
     // players（排队等下一把的不参战）
@@ -973,9 +973,13 @@ class Room {
       p.turretYaw = normAngle(want - p.yaw);
 
       if (inp.fire && p.fireCd <= 0) {
-        // 每人同屏最多 MAX_ACTIVE_BULLETS 发活跃弹
-        const active = this.bullets.reduce((n, b) => n + (b.ownerId === p.id ? 1 : 0), 0);
-        if (active < MAX_ACTIVE_BULLETS) {
+        // 每人同屏最多 MAX_ACTIVE_BULLETS 发；到上限时挤掉自己最早的一发——开火永不卡顿
+        const mine = this.bullets.filter((b) => b.ownerId === p.id);
+        if (mine.length >= MAX_ACTIVE_BULLETS) {
+          const oldest = mine.reduce((a, b) => (b.age > a.age ? b : a));
+          this.bullets.splice(this.bullets.indexOf(oldest), 1);
+        }
+        {
           const dirx = p.aimX - p.x;
           const dirz = p.aimZ - p.z;
           const dlen = Math.max(0.01, hypot(dirx, dirz));
@@ -1268,7 +1272,7 @@ function roomLinks(base, code, playerId, token) {
     `3) 房间满 2 人会【自动开局】，固定对角出生`,
     `4) phase=playing 或 countdown 时循环 GET .../state 与 POST .../action (mx,mz,aimX,aimZ,fire)，action 限流 30 次/秒`,
     `5) 结束后 GET .../result 看比分与战报`,
-    `规则：1v1 空旷台球桌；直射无效——炮弹撞墙反弹至少 1 次后才有杀伤力（最多反弹${MAX_BOUNCES}次、存活${BULLET_LIFE}s，含自己的反弹弹）；每把3血；死亡对方+1；先拿${WIN_SCORE}分赢整场；单把${ROUND_SECONDS}s超时双方不得分；每人同屏最多${MAX_ACTIVE_BULLETS}发；countdown 期间可移动开火。`,
+    `规则：1v1 空旷台球桌；直射无效——炮弹撞墙反弹至少 1 次后才有杀伤力（最多反弹${MAX_BOUNCES}次、存活${BULLET_LIFE}s，含自己的反弹弹）；每把3血；死亡对方+1；先拿${WIN_SCORE}分赢整场；单把${ROUND_SECONDS}s超时双方不得分；每人同屏最多${MAX_ACTIVE_BULLETS}发（超出挤掉最早一发）；countdown 期间全场冻结。`,
     `文档：${docsUrl}`,
   ].join('\n');
   return {
@@ -1313,7 +1317,7 @@ app.get('/api/v1/docs', (_req, res) => {
       winScore: WIN_SCORE,
       roundSeconds: ROUND_SECONDS,
       scoring: '死亡则对方 +1（含自杀）；超时双方不得分；score 即胜把数',
-      countdown: 'countdown 期间允许移动和开火',
+      countdown: 'countdown 期间全场冻结（不能移动/开火），归零后双方同时开打',
       bullets: {
         maxActive: MAX_ACTIVE_BULLETS,
         fireCd: FIRE_CD,
@@ -1340,7 +1344,7 @@ app.get('/api/v1/docs', (_req, res) => {
       '2. 分发 humanUrl / room 码给对手 Agent',
       '3. 各 Agent POST .../join（kind=agent）',
       '4. 满 2 人自动开局（也可任一方 start）',
-      '5. phase=countdown/playing 时循环 state + action（countdown 期间即可移动开火）',
+      '5. phase=playing 时循环 state + action（countdown 为冻结读秒，归零后同时开打）',
       '6. phase=round_break 为把间；finished 后 GET result 看比分与中文战报',
     ],
     endpoints: {
