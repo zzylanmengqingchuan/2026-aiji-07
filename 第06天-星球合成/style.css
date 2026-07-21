@@ -1,0 +1,480 @@
+/* 星球合成 · Soft Pop · 左介绍/选项 + 右对战 */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=Space+Mono:wght@400;700&display=swap');
+
+:root {
+  --background: oklch(0.9789 0.0082 121.6272);
+  --foreground: oklch(0 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0 0 0);
+  --primary: oklch(0.5106 0.2301 276.9656);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.7038 0.1230 182.5025);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.9551 0 0);
+  --muted-foreground: oklch(0.3211 0 0);
+  --accent: oklch(0.7686 0.1647 70.0804);
+  --accent-foreground: oklch(0 0 0);
+  --destructive: oklch(0.6368 0.2078 25.3313);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0 0 0);
+  --ring: oklch(0.7853 0.1041 274.7134);
+  --radius: 1rem;
+  --font-sans: "DM Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, monospace;
+  --tracking-normal: normal;
+  --shadow-sm: 0 1px 2px -1px hsl(0 0% 10% / 0.08);
+  --shadow-md: 0 4px 12px -2px hsl(0 0% 10% / 0.1);
+  --shadow-lg: 0 10px 28px -6px hsl(0 0% 10% / 0.14);
+  --shadow-pop: 0 4px 0 color-mix(in oklch, var(--primary) 75%, black);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.12 0.015 270);
+    --foreground: oklch(1 0 0);
+    --card: oklch(0.2455 0.0217 257.2823);
+    --card-foreground: oklch(1 0 0);
+    --popover: oklch(0.2455 0.0217 257.2823);
+    --popover-foreground: oklch(1 0 0);
+    --primary: oklch(0.6801 0.1583 276.9349);
+    --primary-foreground: oklch(0 0 0);
+    --secondary: oklch(0.7845 0.1325 181.9120);
+    --secondary-foreground: oklch(0 0 0);
+    --muted: oklch(0.3211 0 0);
+    --muted-foreground: oklch(0.8452 0 0);
+    --accent: oklch(0.8790 0.1534 91.6054);
+    --accent-foreground: oklch(0 0 0);
+    --destructive: oklch(0.7106 0.1661 22.2162);
+    --destructive-foreground: oklch(0 0 0);
+    --border: oklch(0.4459 0 0);
+    --ring: oklch(0.6801 0.1583 276.9349);
+    --shadow-sm: 0 1px 2px -1px hsl(0 0% 0% / 0.35);
+    --shadow-md: 0 4px 16px -2px hsl(0 0% 0% / 0.45);
+    --shadow-lg: 0 12px 32px -6px hsl(0 0% 0% / 0.55);
+    --shadow-pop: 0 4px 0 color-mix(in oklch, var(--primary) 55%, black);
+  }
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body { height: 100%; }
+
+body {
+  font-family: var(--font-sans);
+  letter-spacing: var(--tracking-normal);
+  background:
+    radial-gradient(900px 560px at 12% -8%, color-mix(in oklch, var(--primary) 22%, transparent), transparent 60%),
+    radial-gradient(720px 480px at 92% 8%, color-mix(in oklch, var(--secondary) 18%, transparent), transparent 55%),
+    radial-gradient(640px 420px at 50% 100%, color-mix(in oklch, var(--accent) 14%, transparent), transparent 50%),
+    var(--background);
+  color: var(--foreground);
+  min-height: 100%;
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app {
+  width: 100%;
+  max-width: 980px;
+  padding: 12px 16px;
+  max-height: 100dvh;
+}
+
+/* 左介绍/选项 · 右对战 */
+#main {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(280px, 420px);
+  gap: 16px;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+}
+
+/* ===== 左侧栏 ===== */
+#panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  max-height: min(92dvh, 720px);
+  overflow-y: auto;
+  order: 1;
+}
+
+.card-block {
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 14px 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.panel-intro h1 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  background: linear-gradient(120deg, var(--primary) 0%, oklch(0.6559 0.2118 354.3084) 45%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 1px 0 color-mix(in oklch, var(--primary) 20%, transparent));
+}
+
+.panel-intro .sub {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin: 8px 0 10px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.tips {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tips li {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+  padding-left: 14px;
+  position: relative;
+}
+.tips li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+}
+
+.panel-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.card {
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 2px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  padding: 10px 8px;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.card .label,
+.section-title,
+.next-card .label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted-foreground);
+}
+
+.card .num {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-top: 4px;
+  line-height: 1.1;
+}
+
+.next-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(180deg, color-mix(in oklch, var(--secondary) 12%, var(--card)), var(--card));
+}
+.next-card canvas {
+  width: 72px;
+  height: 72px;
+  border-radius: calc(var(--radius) - 4px);
+  background: color-mix(in oklch, var(--muted) 70%, transparent);
+}
+
+.section-title {
+  margin-bottom: 10px;
+  text-align: left;
+}
+
+.btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.btns button {
+  padding: 10px 6px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  border: 2px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  cursor: pointer;
+  box-shadow: 0 3px 0 color-mix(in oklch, var(--secondary) 55%, black);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.12s ease;
+}
+.btns button:hover { filter: brightness(1.05); }
+.btns button:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 color-mix(in oklch, var(--secondary) 55%, black);
+}
+.btns button#btn-codex {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  box-shadow: 0 3px 0 color-mix(in oklch, var(--accent) 55%, black);
+}
+.btns button#btn-codex:active {
+  box-shadow: 0 1px 0 color-mix(in oklch, var(--accent) 55%, black);
+}
+.btns button.off {
+  color: var(--muted-foreground);
+  background: var(--muted);
+  text-decoration: line-through;
+  box-shadow: 0 3px 0 color-mix(in oklch, var(--muted) 70%, black);
+  opacity: 0.85;
+}
+
+.side-best {
+  margin: 12px 0 0;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ===== 右侧对战区 ===== */
+#stage {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  order: 2;
+  display: flex;
+  align-items: stretch;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(92dvh, 720px);
+  aspect-ratio: 480 / 720;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  box-shadow: var(--shadow-lg), 0 0 0 4px color-mix(in oklch, var(--primary) 12%, transparent);
+  touch-action: none;
+  cursor: crosshair;
+  background: #0a0d20;
+  object-fit: contain;
+}
+
+/* Overlays */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklch, var(--background) 55%, transparent);
+  backdrop-filter: blur(6px);
+  border-radius: var(--radius);
+  z-index: 5;
+}
+.panel-box {
+  text-align: center;
+  padding: 24px 26px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 2px solid var(--border);
+  border-radius: calc(var(--radius) + 2px);
+  box-shadow: var(--shadow-lg);
+  max-width: 86%;
+}
+.panel-box h2 {
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+.panel-box .tip {
+  font-size: 13px;
+  color: var(--muted-foreground);
+  margin: 6px 0;
+  line-height: 1.45;
+}
+.score-line {
+  font-size: 17px;
+  margin: 12px 0 4px;
+  font-weight: 600;
+}
+.score-line span {
+  color: var(--primary);
+  font-weight: 800;
+  font-family: var(--font-mono);
+}
+.best-line {
+  font-size: 13px;
+  color: var(--muted-foreground);
+  margin: 8px 0 12px;
+}
+.best-line span {
+  color: var(--accent);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+.record {
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 800;
+  animation: pulse 0.8s infinite alternate;
+}
+@keyframes pulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.1); }
+}
+
+.big-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px 20px;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--primary-foreground);
+  background: var(--primary);
+  border: 2px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  cursor: pointer;
+  box-shadow: var(--shadow-pop);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.12s ease;
+}
+.big-btn:hover { filter: brightness(1.06); }
+.big-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 color-mix(in oklch, var(--primary) 70%, black);
+}
+.ghost-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 20px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--foreground);
+  background: transparent;
+  border: 2px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  cursor: pointer;
+}
+.ghost-btn:hover { background: color-mix(in oklch, var(--muted) 80%, transparent); }
+.ghost-btn:active { background: var(--muted); }
+
+/* Codex */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in oklch, var(--foreground) 45%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  padding: 16px;
+  backdrop-filter: blur(4px);
+}
+.modal-box {
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 2px solid var(--border);
+  border-radius: calc(var(--radius) + 2px);
+  padding: 22px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+.modal-box h2 {
+  margin-bottom: 14px;
+  font-weight: 800;
+}
+#codex-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+}
+.codex-cell {
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  padding: 10px 4px 8px;
+  box-shadow: var(--shadow-sm);
+}
+.codex-cell canvas { width: 56px; height: 56px; }
+.codex-cell .cname {
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+.codex-cell .cscore {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--primary);
+  font-weight: 700;
+  margin-top: 2px;
+}
+.codex-note {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin: 14px 0 6px;
+  line-height: 1.65;
+}
+
+.hidden { display: none !important; }
+
+/* 窄屏：上对战、下介绍（仍尽量一屏） */
+@media (max-width: 760px) {
+  body { align-items: flex-start; }
+  #app {
+    max-height: none;
+    padding: 10px 12px 16px;
+  }
+  #main {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  #stage { order: 1; }
+  #panel {
+    order: 2;
+    max-height: none;
+  }
+  #game {
+    max-height: min(62dvh, 560px);
+    margin: 0 auto;
+  }
+  .panel-intro h1 { font-size: 20px; }
+  .tips li:nth-child(n+3) { display: none; }
+}

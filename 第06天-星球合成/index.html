@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#f7f8f2">
+<title>星球合成 · 合成大太阳</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-soft-pop">
+<div id="app">
+  <div id="main">
+    <!-- 左：游戏介绍 + 相关选项 -->
+    <aside id="panel">
+      <section class="panel-intro card-block">
+        <h1>🪐 星球合成</h1>
+        <p class="sub">坠落、碰撞、合成 —— 点亮属于你的太阳！</p>
+        <ul class="tips">
+          <li>移动瞄准，松手 / 点击让星球落下</li>
+          <li>两个相同星球碰撞会合成更大一级</li>
+          <li>堆积超过警戒线太久就会失败</li>
+          <li>键盘：A/D 移动，空格落下，P 暂停，R 重开</li>
+        </ul>
+      </section>
+
+      <section class="panel-stats">
+        <div class="card">
+          <div class="label">分数</div>
+          <div id="score" class="num">0</div>
+        </div>
+        <div class="card">
+          <div class="label">最高分</div>
+          <div id="high" class="num">0</div>
+        </div>
+      </section>
+
+      <section class="card next-card card-block">
+        <div class="label">下一个</div>
+        <canvas id="next" width="96" height="96"></canvas>
+      </section>
+
+      <section class="panel-options card-block">
+        <div class="section-title">游戏选项</div>
+        <div class="btns">
+          <button id="btn-pause" type="button">⏸ 暂停</button>
+          <button id="btn-restart" type="button">↻ 重开</button>
+          <button id="btn-sound" type="button">🔊 音效</button>
+          <button id="btn-codex" type="button">📖 图鉴</button>
+        </div>
+        <p class="best-line side-best">历史最高：<span id="start-high">0</span></p>
+      </section>
+    </aside>
+
+    <!-- 右：对战主界面 -->
+    <div id="stage">
+      <canvas id="game" width="480" height="720"></canvas>
+
+      <div id="ov-start" class="overlay">
+        <div class="panel-box">
+          <h2>🪐 星球合成</h2>
+          <p class="tip">同色星球碰撞即可合成</p>
+          <p class="tip">挑战：合成出太阳！</p>
+          <p class="best-line">历史最高分：<span id="start-high-overlay">0</span></p>
+          <button id="btn-start" class="big-btn" type="button">开始游戏</button>
+        </div>
+      </div>
+
+      <div id="ov-pause" class="overlay hidden">
+        <div class="panel-box">
+          <h2>⏸ 已暂停</h2>
+          <button id="btn-resume" class="big-btn" type="button">继续游戏</button>
+          <button id="btn-restart-pause" class="ghost-btn" type="button">重新开始</button>
+        </div>
+      </div>
+
+      <div id="ov-over" class="overlay hidden">
+        <div class="panel-box">
+          <h2>💫 游戏结束</h2>
+          <p id="over-record" class="record hidden">🎉 新纪录！</p>
+          <p class="score-line">本局得分：<span id="over-score">0</span></p>
+          <p class="best-line">历史最高分：<span id="over-high">0</span></p>
+          <button id="btn-restart-over" class="big-btn" type="button">重新挑战</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="codex" class="modal hidden">
+  <div class="modal-box">
+    <h2>📖 星球图鉴</h2>
+    <div id="codex-grid"></div>
+    <p class="codex-note">两个相同星球合成下一级；合成太阳将触发庆典！两个太阳相遇会湮灭成巨额分数。</p>
+    <button id="btn-codex-close" class="big-btn" type="button">关闭</button>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/effects.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/render.js"></script>
+<script src="js/game.js"></script>
+<script>
+  // 侧栏与开始浮层共用最高分展示
+  (function syncHighLabels() {
+    var a = document.getElementById('start-high');
+    var b = document.getElementById('start-high-overlay');
+    if (!a || !b) return;
+    var obs = new MutationObserver(function () { b.textContent = a.textContent; });
+    obs.observe(a, { childList: true, characterData: true, subtree: true });
+    b.textContent = a.textContent;
+  })();
+</script>
+</body>
+</html>
