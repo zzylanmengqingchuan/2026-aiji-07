@@ -1,0 +1,16 @@
+[Unit]
+Description=Box Rivals web game
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/box-remove
+Environment=NODE_ENV=production
+Environment=PORT=3200
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
