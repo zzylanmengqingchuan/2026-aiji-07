@@ -2,6 +2,7 @@
  * Tank Trouble 式 1v1 反弹坦克对战服务端（台球桌版）
  * 规则：
  * - 1v1：满 2 人自动开局；仅入房玩家/用户 Agent 互打，无系统 AI 兵
+ * - 人机对战：create / POST /rooms 传 vsBot:true，入座后立即补 1 名系统 AI 车长（kind=bot，bot.js 决策）
  * - 空旷台球桌：±55 战场 + 四周边框墙（库边），无任何迷宫墙/房屋；固定对角出生点 (±38, ±38)
  * - 直射无效：炮弹必须先撞过墙面（外框墙）至少 1 次才有杀伤力，未反弹的炮弹直接穿过坦克
  * - 每人每把 3 血；被致命炮弹击中 -1，包括被自己反弹的炮弹击中
@@ -17,6 +18,7 @@ const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 const { WebSocketServer } = require('ws');
+const { computeBotInput } = require('./bot.js'); // 系统 AI 车长决策：每 tick 改写 bot.input
 
 const PORT = process.env.PORT || 3100;
 // 对战 20Hz；大厅更低频，省带宽
@@ -257,7 +259,7 @@ class Room {
     const token = newToken();
     const slot = this.order.length;
     const spawn = this.spawns[slot % this.spawns.length];
-    const kind = opts.kind === 'agent' ? 'agent' : 'human';
+    const kind = opts.kind === 'agent' ? 'agent' : opts.kind === 'bot' ? 'bot' : 'human';
     const waitingNextRound = midMatch; // 中途加入：等下一把
     const p = {
       id,
@@ -265,7 +267,7 @@ class Room {
       ws: ws || null,
       kind,
       agentId: opts.agentId ? String(opts.agentId).slice(0, 64) : null,
-      name: (name || (kind === 'agent' ? 'Agent' : '玩家')).slice(0, 16),
+      name: (name || (kind === 'agent' ? 'Agent' : kind === 'bot' ? 'AI 车长' : '玩家')).slice(0, 16),
       color: COLORS[slot % COLORS.length],
       colorName: COLOR_NAMES[slot % COLOR_NAMES.length],
       slot,
@@ -324,6 +326,18 @@ class Room {
     };
   }
 
+  /**
+   * 加入系统 AI 车长（人机对战）：占一个选手位，ws 恒为 null；
+   * 每 tick 由 bot.js 的 computeBotInput 直接改写 input，计分/死亡/战报全走现有逻辑。
+   * 加入后满 2 人时同样触发 addPlayer 里的自动开局。
+   */
+  addBotPlayer() {
+    const r = this.addPlayer(null, 'AI 车长', { kind: 'bot' });
+    if (!r.ok) return r;
+    r.player.isBot = true;
+    return r;
+  }
+
   getPlayerAuth(playerId, token) {
     const p = this.players.get(playerId);
     if (!p || p.token !== token) return null;
@@ -356,7 +370,11 @@ class Room {
   }
 
   maybeDestroyRoom() {
-    if (this.players.size === 0 && this.spectators.size === 0) {
+    // 纯 bot 不撑房：房里只剩系统 AI 车长（没有任何人类/Agent 真实玩家）时同样销毁。
+    // 例外：keepEmptyLobby 的「空房+bot」大厅要留着等 Agent join 进来和 bot 打。
+    const botOnly =
+      this.players.size > 0 && [...this.players.values()].every((p) => p.isBot);
+    if ((this.players.size === 0 || botOnly) && this.spectators.size === 0) {
       if (this.keepEmptyLobby && this.state === 'lobby') return;
       if (this.result) {
         resultArchive.set(this.code, { ...this.result, archivedAt: Date.now() });
@@ -832,6 +850,11 @@ class Room {
   }
 
   tick() {
+    // 系统 AI 车长：与人类同规则——countdown/playing/round_break 都照算输入存进 p.input，
+    // 由下方玩家循环照常消费（round_break 循环不跑，输入自然不生效；tick 只在上述三种状态被调用）
+    for (const p of this.players.values()) {
+      if (p.isBot) computeBotInput(this, p, DT);
+    }
     if (this.state === 'round_break') {
       this.roundBreakLeft -= DT;
       if (this.roundBreakLeft <= 0) this.beginNextRound();
@@ -1284,7 +1307,7 @@ app.get('/api/v1/docs', (_req, res) => {
     name: 'Tank Trouble 1v1 台球桌反弹坦克 Agent API',
     version: '2.1',
     summary:
-      `1v1 台球桌反弹坦克对战（空旷 ±55 场地 + 四周边框墙，无迷宫墙/房屋）。直射无效：炮弹撞墙反弹至少 1 次后才致命，最多反弹 ${MAX_BOUNCES} 次、存活 ${BULLET_LIFE} 秒。每把 ${PLAYER_MAX_HP} 血，被致命炮弹击中 -1（包括被自己反弹的炮弹击中）；血尽死亡对方 +1（自杀同样对方 +1）；先拿 ${WIN_SCORE} 分赢整场；单把 ${ROUND_SECONDS}s，超时双方不得分；${WIN_SCORE - 1}:${WIN_SCORE - 1} 后下一把为决胜把。无系统AI兵。`,
+      `1v1 台球桌反弹坦克对战（空旷 ±55 场地 + 四周边框墙，无迷宫墙/房屋）。直射无效：炮弹撞墙反弹至少 1 次后才致命，最多反弹 ${MAX_BOUNCES} 次、存活 ${BULLET_LIFE} 秒。每把 ${PLAYER_MAX_HP} 血，被致命炮弹击中 -1（包括被自己反弹的炮弹击中）；血尽死亡对方 +1（自杀同样对方 +1）；先拿 ${WIN_SCORE} 分赢整场；单把 ${ROUND_SECONDS}s，超时双方不得分；${WIN_SCORE - 1}:${WIN_SCORE - 1} 后下一把为决胜把。无系统AI兵（人机对战房除外：vsBot:true 时房内会有 1 名系统 AI 车长）。`,
     rules: {
       maxHp: PLAYER_MAX_HP,
       winScore: WIN_SCORE,
@@ -1313,7 +1336,7 @@ app.get('/api/v1/docs', (_req, res) => {
       'players[].score': '胜把数，先到 winScore 赢整场',
     },
     flow: [
-      '1. POST /api/v1/rooms 创建（或人类网页创建）',
+      '1. POST /api/v1/rooms 创建（或人类网页创建）；想和系统 AI 对打：body 加 vsBot:true，入座即补 1 名 AI 车长并自动开局',
       '2. 分发 humanUrl / room 码给对手 Agent',
       '3. 各 Agent POST .../join（kind=agent）',
       '4. 满 2 人自动开局（也可任一方 start）',
@@ -1321,7 +1344,14 @@ app.get('/api/v1/docs', (_req, res) => {
       '6. phase=round_break 为把间；finished 后 GET result 看比分与中文战报',
     ],
     endpoints: {
-      'POST /api/v1/rooms': { body: { name: 'string', agentId: 'string?', kind: 'agent|human' } },
+      'POST /api/v1/rooms': {
+        body: {
+          name: 'string',
+          agentId: 'string?',
+          kind: 'agent|human',
+          vsBot: 'boolean? 传 true 立即加入系统 AI 车长（kind=bot）陪练，满 2 人自动开局；与 empty:true 同传则空房预置 bot 一个位，Agent join 后与 bot 对战',
+        },
+      },
       'POST /api/v1/rooms/:code/join': { body: { name: 'string', agentId: 'string?', kind: 'agent|human' } },
       'POST /api/v1/rooms/:code/start': { body: { playerId: 'string', token: 'string' } },
       'POST /api/v1/rooms/:code/action': {
@@ -1345,7 +1375,7 @@ app.get('/api/v1/docs', (_req, res) => {
       'GET /api/v1/rooms/:code': '房间大厅信息',
     },
     websocket: {
-      create: { type: 'create', name: '', kind: 'agent', agentId: '' },
+      create: { type: 'create', name: '', kind: 'agent', agentId: '', vsBot: 'boolean? true 则立即补 1 名系统 AI 车长陪练' },
       join: { type: 'join', code: 'XXXX', name: '', kind: 'agent', agentId: '' },
       input: { type: 'input', mx: 0, mz: 0, aimX: 0, aimZ: 0, fire: false },
       start: { type: 'start' },
@@ -1367,6 +1397,11 @@ app.post('/api/v1/rooms', (req, res) => {
     } while (rooms.has(code));
     const room = new Room(code, req.body && req.body.seed);
     room.keepEmptyLobby = true;
+    // empty + vsBot：空房里预置 1 名系统 AI 车长占一个位，Agent join 进来即满 2 人自动开局
+    if (req.body.vsBot) {
+      const br = room.addBotPlayer();
+      if (!br.ok) return res.status(400).json(br);
+    }
     rooms.set(code, room);
     const links = roomLinks(base, code, null, null);
     return res.json({
@@ -1374,6 +1409,7 @@ app.post('/api/v1/rooms', (req, res) => {
       code,
       hostKey: room.hostKey,
       empty: true,
+      vsBot: !!req.body.vsBot,
       ...links,
       openSpectateHint: '请立即打开 spectateUrl 观战',
     });
@@ -1383,6 +1419,11 @@ app.post('/api/v1/rooms', (req, res) => {
   const agentId = req.body && req.body.agentId;
   const r = createRoomWithPlayer(name, { kind, agentId, seed: req.body && req.body.seed }, null);
   if (!r.ok) return res.status(400).json(r);
+  // 人机对战：入座后立即补 1 名系统 AI 车长，满 2 人自动开局
+  if (req.body && req.body.vsBot) {
+    const br = r.room.addBotPlayer();
+    if (!br.ok) return res.status(400).json(br);
+  }
   const links = roomLinks(base, r.room.code, r.id, r.token);
   res.json({
     ok: true,
@@ -1391,6 +1432,9 @@ app.post('/api/v1/rooms', (req, res) => {
     token: r.token,
     hostId: r.room.hostId,
     hostKey: r.room.hostKey,
+    vsBot: !!(req.body && req.body.vsBot),
+    phase: r.room.state,
+    players: [...r.room.players.values()].map((p) => ({ id: p.id, name: p.name, kind: p.kind })),
     ...links,
     openSpectateHint: '请用户浏览器打开 spectateUrl 即可实时观看 Agent 对战',
   });
@@ -1607,6 +1651,11 @@ wss.on('connection', (ws) => {
     if (msg.type === 'create') {
       const r = createRoomWithPlayer(msg.name, { kind: msg.kind, agentId: msg.agentId, seed: msg.seed }, ws);
       if (!r.ok) return send(ws, { type: 'error', err: r.err });
+      // 人机对战：人类入座后立即补 1 名系统 AI 车长，满 2 人触发自动开局
+      if (msg.vsBot) {
+        const br = r.room.addBotPlayer();
+        if (!br.ok) return send(ws, { type: 'error', err: br.err });
+      }
       clientRoom.set(ws, r.room.code);
       ws.playerId = r.id;
       ws.role = 'player';
@@ -1751,8 +1800,11 @@ setInterval(() => {
     if (now - (r.archivedAt || r.finishedAt || 0) > RESULT_TTL_MS) resultArchive.delete(code);
   }
   for (const [code, room] of rooms) {
+    // 纯 bot 的空房大厅同样按过期处理（bot 不撑房）
+    const botOnly =
+      room.players.size > 0 && [...room.players.values()].every((p) => p.isBot);
     const staleEmptyLobby = room.keepEmptyLobby && room.state === 'lobby' &&
-      room.players.size === 0 && room.spectators.size === 0 &&
+      (room.players.size === 0 || botOnly) && room.spectators.size === 0 &&
       now - room.lastTouchedAt > RESULT_TTL_MS;
     if (staleEmptyLobby) rooms.delete(code);
   }
