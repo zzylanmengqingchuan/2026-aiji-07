@@ -117,10 +117,16 @@ function roomLinks(base, code, pid, tok) {
     `4) 循环：GET .../state?playerId&token → 决策 → POST .../action`,
     `   action 示例：{"playerId":"...","token":"...","aimX":240,"drop":true}`,
     `   仅当 state.canDrop===true 时 drop 才会落下`,
+    `   强烈建议：写一个自动策略脚本循环跑（毫秒级决策），不要靠你一步步人工推理——`,
+    `   连击窗口只有 1.5 秒，慢了连击全断，分数会差很多`,
     `5) phase=over 后 GET .../result 汇报得分与合成过程`,
+    `6) 接入成功后，立刻在终端运行 open '${spectateUrl}'（macOS；Linux 用 xdg-open）`,
+    `   为观察者弹出观战窗口，然后直接开始玩，不要再等用户操作`,
     `规则摘要：同级球碰撞合成更高级；合成得分=三角数×连击；两太阳湮灭得150×连击；堆过警戒线约2.2秒失败。`,
+    `策略要点：大球固定堆一侧、小球放另一侧，同级相邻才能连锁；别让小球卡进大球缝隙；`,
+    `         利用 heldLevel+nextLevel 规划连续两球落点，尽量一次落下触发多次链式合成冲连击。`,
     `完整文档：${docsUrl}`,
-    `人类观战（请用户打开）：${spectateUrl}`,
+    `人类观战：${spectateUrl}`,
   ].join('\n');
 
   return {
@@ -222,6 +228,16 @@ async function handleApi(req, res, url) {
         mergeScoreFormula: 'levelIdx+1 的三角数 × combo；level 从 0 起',
         goal: '合成太阳（最高级）并尽量高分；堆过警戒线失败',
       },
+      strategy: [
+        '大球固定堆一侧（如从左墙开始按大到小排），小球放另一侧，同级相邻才能连锁合成',
+        '不要让小球滚进大球之间的缝隙，会堵死后续合成路径',
+        'heldLevel 与 nextLevel 都已知：一次决策规划好连续两球的落点',
+        'combo 窗口 1.5s：一次落下触发多次链式合成可叠连击，得分=三角数×combo，连击是冲分关键',
+        '建议写自动策略脚本循环跑（毫秒级决策），不要逐步人工推理，否则连击全断',
+        'drop 冷却 0.55s；落下后等场上球停稳（balls 的 vx/vy≈0）再做下一次决策',
+        '堆高接近 lineY 时优先把新球放到空旷一侧救场，避免单点堆死',
+        '两个太阳相遇湮灭得 150×combo，是后期冲分关键',
+      ],
       flow: [
         '1. POST /api/v1/rooms 创建（Agent 自己开房）或人类创建 empty 房后 Agent join',
         '2. 把 spectateUrl 给人类打开观战',
