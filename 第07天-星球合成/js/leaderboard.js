@@ -21,6 +21,7 @@
     nameInput.value = localStorage.getItem(NAME_KEY) || '';
     nameInput.addEventListener('change', function () {
       localStorage.setItem(NAME_KEY, nameInput.value.trim().slice(0, 12));
+      mergeServerHistory();
       loadMine();
     });
   }
@@ -113,6 +114,32 @@
     );
   }
 
+  /* 迁移兜底：把历史上报过的同名牌记录合并进本机（只跑一次，去重） */
+  let serverMerged = false;
+  async function mergeServerHistory() {
+    const name = getName();
+    if (!name || serverMerged) return;
+    serverMerged = true;
+    try {
+      const r = await fetch('/api/v1/history?name=' + encodeURIComponent(name) + '&limit=100');
+      const d = await r.json();
+      if (!d.ok || !d.items) return;
+      const games = readMyGames();
+      const seen = new Set(games.map((g) => g.ts + ':' + g.score));
+      for (const it of d.items) {
+        const key = it.finishedAt + ':' + it.score;
+        if (!seen.has(key)) {
+          games.push({ score: it.score, maxLevelName: it.maxLevelName || null, ts: it.finishedAt });
+        }
+      }
+      games.sort((a, b) => b.ts - a.ts);
+      localStorage.setItem(MY_GAMES_KEY, JSON.stringify(games.slice(-100)));
+      loadMine();
+    } catch (e) {
+      /* 合并失败不影响本地记录 */
+    }
+  }
+
   tabs.forEach((btn) => {
     btn.addEventListener('click', function () {
       tabs.forEach((b) => b.classList.remove('active'));
@@ -155,6 +182,7 @@
   };
 
   loadBoard();
+  mergeServerHistory();
   loadMine();
   setInterval(loadBoard, 30000);
 })();

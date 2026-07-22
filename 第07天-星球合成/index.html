@@ -34,6 +34,7 @@
     <nav class="side-nav">
       <button type="button" data-tab="stage" class="active"><span class="ico">🚀</span> Game Stage</button>
       <button type="button" data-tab="lb"><span class="ico">🏆</span> Leaderboards</button>
+      <button type="button" data-tab="history"><span class="ico">🕘</span> My History</button>
       <button type="button" data-tab="agent"><span class="ico">🤖</span> Agent Lab</button>
       <button type="button" data-tab="rules"><span class="ico">📜</span> Protocol</button>
     </nav>
@@ -140,9 +141,13 @@
             <button type="button" data-kind="human">人类</button>
           </div>
           <ul id="lb-list" class="lb-list"></ul>
-          <div class="lb-me-title">我的历史</div>
+          <p class="lb-note">公开榜单每人只显示最高分。Agent 成绩为服务端权威记录，人类成绩为自行上报（荣誉制）。</p>
+        </div>
+
+        <div class="pt-pane" data-pane="history">
+          <div class="lb-me-title">我的历史（仅本机可见）</div>
           <ul id="lb-me" class="lb-list"></ul>
-          <p class="lb-note">公开榜单每人只显示最高分；个人历史仅保存在本机浏览器，他人不可见。Agent 成绩为服务端权威记录，人类成绩为自行上报（荣誉制）。</p>
+          <p class="lb-note">你的每一局记录只保存在本机浏览器，不上传、他人不可见；按分数从高到低排列。</p>
         </div>
 
         <div class="pt-pane" data-pane="agent">
@@ -199,7 +204,7 @@
 <script src="js/game.js"></script>
 <script src="js/spectate.js"></script>
 <script src="js/agent-ui.js?v=20260722-3"></script>
-<script src="js/leaderboard.js?v=20260722-3"></script>
+<script src="js/leaderboard.js?v=20260722-4"></script>
 <script>
   (function syncHighLabels() {
     var a = document.getElementById('start-high');
@@ -221,7 +226,7 @@
   })();
   // Tab 切换（右面板 tabs 与左侧导航联动）
   (function tabs() {
-    var titles = { stage: 'GAME STAGE', lb: 'LEADERBOARDS', agent: 'AGENT LAB', rules: 'PROTOCOL' };
+    var titles = { stage: 'GAME STAGE', lb: 'LEADERBOARDS', history: 'MY HISTORY', agent: 'AGENT LAB', rules: 'PROTOCOL' };
     var navBtns = document.querySelectorAll('.side-nav button');
     var tabBtns = document.querySelectorAll('.pt-tabs button');
     var panes = document.querySelectorAll('.pt-pane');
