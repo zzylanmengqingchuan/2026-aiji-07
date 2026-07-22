@@ -60,11 +60,27 @@
     }
 
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function' && window.isSecureContext) {
-      return navigator.clipboard.writeText(text).then(function () {
-        return 'clipboard';
+      // 加超时：权限弹窗 / 页面失焦时 writeText 可能永不 settle，必须把控制权拿回来
+      return Promise.race([
+        navigator.clipboard.writeText(text).then(function () {
+          return 'clipboard';
+        }),
+        new Promise(function (resolve, reject) {
+          setTimeout(function () {
+            reject(new Error('复制超时'));
+          }, 3000);
+        }),
+      ]).catch(function (err) {
+        // Clipboard API 失败时降级 execCommand，仍有机会成功
+        return execCopy(text);
       });
     }
 
+    return execCopy(text);
+  }
+
+  /** 临时 textarea + execCommand 兜底（HTTP 站点的主力路径） */
+  function execCopy(text) {
     return new Promise(function (resolve, reject) {
       const el = document.createElement('textarea');
       el.value = text;
@@ -106,6 +122,17 @@
     return data;
   }
 
+  /** 选中文案框全文，方便用户 Cmd+C 兜底 */
+  function selectShare() {
+    try {
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
   function applyRoom(data) {
     const code = data.code;
     const spectateUrl =
@@ -116,26 +143,15 @@
 
     lastShare = share;
     ta.value = share;
-    ta.readOnly = false;
-    // 选中方便用户 Cmd+C
-    try {
-      ta.focus();
-      ta.select();
-      ta.setSelectionRange(0, ta.value.length);
-    } catch (e) {
-      /* ignore */
-    }
+    ta.readOnly = true; // readonly 不影响选中/复制，防止误改
+    selectShare();
 
     if (link) {
       link.href = spectateUrl;
-      link.textContent = '打开观战页 · 房间 ' + code;
+      link.textContent = '👀 打开观战页 · 房间 ' + code;
       link.style.display = 'block';
     }
     btnInvite.textContent = '✓ 已开房 ' + code;
-    setStatus(
-      '房间 ' + code + ' · 文案 ' + share.length + ' 字已填入下方。请点「复制给 Agent」，或直接 Cmd+C。',
-      false
-    );
     return { code: code, share: share, spectateUrl: spectateUrl };
   }
 
@@ -150,20 +166,26 @@
     setStatus('正在创建房间…', false);
     try {
       const room = applyRoom(await createEmptyRoom());
+      // 同一次点击手势内顺手复制，成功则一键完成；失败则引导点「复制给 Agent」
       try {
-        const w = window.open(room.spectateUrl, '_blank', 'noopener');
-        if (!w) {
-          setStatus(
-            '房间 ' +
-              room.code +
-              ' 已创建（文案 ' +
-              room.share.length +
-              ' 字）。弹窗被拦截，请点「打开观战页」，并点「复制给 Agent」。',
-            false
-          );
-        }
-      } catch (e) {
-        /* ignore */
+        await copyText(room.share);
+        setStatus(
+          '房间 ' +
+            room.code +
+            ' 已创建，' +
+            room.share.length +
+            ' 字文案已复制 ✅ 直接粘贴给 Codex（Cmd+V），再点下方观战链接看对局。',
+          false
+        );
+      } catch (copyErr) {
+        setStatus(
+          '房间 ' +
+            room.code +
+            ' 已创建，文案 ' +
+            room.share.length +
+            ' 字已在下方文本框。请点「复制给 Agent」（或 Cmd+C）。',
+          false
+        );
       }
     } catch (e) {
       lastShare = '';
@@ -180,7 +202,7 @@
       btnCopy.disabled = true;
       try {
         let text = (lastShare || ta.value || '').trim();
-        if (!text || text.indexOf('创建失败') === 0) {
+        if (!text) {
           setStatus('尚无文案，先创建房间…', false);
           const room = applyRoom(await createEmptyRoom());
           text = room.share;
@@ -194,32 +216,24 @@
           const method = await copyText(text);
           btnCopy.textContent = '✓ 已复制';
           setStatus(
-            '已复制 ' + text.length + ' 字（' + method + '）。去 Codex 里粘贴（Cmd+V）即可。',
+            '已复制 ' + text.length + ' 字。去 Codex 里粘贴（Cmd+V）即可；点下方链接观战。',
             false
           );
         } catch (copyErr) {
-          // 复制失败：选中文本框 + 弹出可手动复制的提示
-          ta.readOnly = false;
-          ta.focus();
-          ta.select();
+          // 复制失败：选中文本框全文，引导手动复制（不弹 prompt，长文案在弹窗里没法用）
+          selectShare();
           setStatus(
-            '自动复制失败，已选中下方全文：请按 Cmd+C（Windows: Ctrl+C）手动复制。共 ' +
+            '自动复制失败，已为你选中下方全文：请按 Cmd+C（Windows: Ctrl+C）手动复制。共 ' +
               text.length +
               ' 字。',
             true
           );
-          btnCopy.textContent = '请按 Cmd+C';
-          // 再用 prompt 兜底（部分浏览器可从中复制）
-          try {
-            window.prompt('自动复制失败，请全选并复制以下内容：', text);
-          } catch (e2) {
-            /* ignore */
-          }
+          btnCopy.textContent = '已全选，请按 Cmd+C';
         }
 
         setTimeout(function () {
           btnCopy.textContent = '复制给 Agent';
-        }, 2500);
+        }, 3000);
       } catch (e) {
         setStatus('失败：' + (e.message || e), true);
         btnCopy.textContent = '复制给 Agent';
