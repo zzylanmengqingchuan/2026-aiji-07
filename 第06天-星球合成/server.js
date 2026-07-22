@@ -348,6 +348,14 @@ async function handleApi(req, res, url) {
     const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '30', 10) || 30, 1), 100);
     let items = readResults();
     if (kind === 'agent' || kind === 'human') items = items.filter((r) => r.kind === kind);
+    // 每人（kind+name）只保留最高分一条
+    const best = new Map();
+    for (const r of items) {
+      const key = r.kind + '|' + r.name;
+      const cur = best.get(key);
+      if (!cur || r.score > cur.score) best.set(key, r);
+    }
+    items = [...best.values()];
     items.sort((a, b) => b.score - a.score || a.finishedAt - b.finishedAt);
     sendJson(res, 200, {
       ok: true,

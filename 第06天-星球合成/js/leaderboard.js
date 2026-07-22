@@ -76,20 +76,41 @@
     }
   }
 
-  async function loadMine() {
+  /* 个人历史只存本机浏览器，不上服务器（隐私） */
+  const MY_GAMES_KEY = 'planetMerge_myGames';
+
+  function readMyGames() {
+    try {
+      return JSON.parse(localStorage.getItem(MY_GAMES_KEY) || '[]');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveMyGame(score, maxLevelName) {
+    const games = readMyGames();
+    games.push({ score, maxLevelName: maxLevelName || null, ts: Date.now() });
+    localStorage.setItem(MY_GAMES_KEY, JSON.stringify(games.slice(-100)));
+  }
+
+  function loadMine() {
     if (!meListEl) return;
-    const name = getName();
-    if (!name) {
-      meListEl.innerHTML = '<li class="lb-empty">输入名字后显示你的历史</li>';
+    const games = readMyGames().sort((a, b) => b.score - a.score).slice(0, 20);
+    if (!games.length) {
+      meListEl.innerHTML = '<li class="lb-empty">还没有本机记录，去打一局吧</li>';
       return;
     }
-    try {
-      const r = await fetch('/api/v1/history?name=' + encodeURIComponent(name) + '&limit=20');
-      const d = await r.json();
-      if (d.ok) renderItems(meListEl, d.items, false);
-    } catch (e) {
-      /* 网络失败静默 */
-    }
+    renderItems(
+      meListEl,
+      games.map((g) => ({
+        name: getName() || '我',
+        kind: 'human',
+        score: g.score,
+        maxLevelName: g.maxLevelName,
+        finishedAt: g.ts,
+      })),
+      false
+    );
   }
 
   tabs.forEach((btn) => {
@@ -125,6 +146,8 @@
       } catch (e) {
         /* 上报失败不影响游戏 */
       }
+      // 个人历史只存本机，不上传
+      saveMyGame(score, maxLevelName);
       loadBoard();
       loadMine();
     },
