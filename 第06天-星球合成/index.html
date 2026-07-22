@@ -7,9 +7,15 @@
 <title>星球合成 · PLANET SYNTHESIS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="style.css?v=20260722-brutal">
+<link rel="stylesheet" href="style.css?v=20260722-themes">
 </head>
 <body>
+<script>
+  // 提前应用主题，避免闪烁
+  (function () {
+    document.body.className = localStorage.getItem('planetMerge_theme') || 'theme-hum';
+  })();
+</script>
 <div id="app">
 
   <!-- 左侧导航 -->
@@ -49,6 +55,18 @@
         <span class="chip">🎮 人类单机</span>
         <span class="chip">🤖 Agent 挑战</span>
         <span class="chip">👀 实时观战</span>
+        <select id="theme-select" title="切换主题">
+          <option value="theme-hum">01 · Hum</option>
+          <option value="theme-specimen">02 · Specimen</option>
+          <option value="theme-brutal">04 · Brutal</option>
+          <option value="theme-garden">05 · Garden</option>
+          <option value="theme-atelier">06 · Atelier</option>
+          <option value="theme-sport">11 · Sport</option>
+          <option value="theme-studio">12 · Studio</option>
+          <option value="theme-bloom">14 · Bloom</option>
+          <option value="theme-lumen">19 · Lumen</option>
+          <option value="theme-cobalt">20 · Cobalt</option>
+        </select>
       </nav>
     </header>
 
@@ -189,6 +207,16 @@
     var obs = new MutationObserver(function () { b.textContent = a.textContent; });
     obs.observe(a, { childList: true, characterData: true, subtree: true });
     b.textContent = a.textContent;
+  })();
+  // 主题切换
+  (function themeSwitch() {
+    var sel = document.getElementById('theme-select');
+    if (!sel) return;
+    sel.value = document.body.className || 'theme-hum';
+    sel.addEventListener('change', function () {
+      document.body.className = sel.value;
+      localStorage.setItem('planetMerge_theme', sel.value);
+    });
   })();
   // Tab 切换（右面板 tabs 与左侧导航联动）
   (function tabs() {
