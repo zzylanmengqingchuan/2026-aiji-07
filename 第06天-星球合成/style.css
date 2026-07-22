@@ -9,8 +9,8 @@
   --glass: rgba(255, 255, 255, 0.045);
   --glass-strong: rgba(255, 255, 255, 0.08);
   --line: rgba(255, 255, 255, 0.1);
-  --primary: #7c6cff;
-  --primary-soft: rgba(124, 108, 255, 0.16);
+  --primary: #ff9f45;
+  --primary-soft: rgba(255, 159, 69, 0.16);
   --cyan: #45d5e8;
   --gold: #ffd75e;
   --gold-soft: rgba(255, 215, 94, 0.14);
@@ -34,7 +34,7 @@ html, body { height: 100%; }
 body {
   font-family: var(--font-sans);
   background:
-    radial-gradient(1000px 620px at 15% -10%, rgba(124, 108, 255, 0.18), transparent 60%),
+    radial-gradient(1000px 620px at 15% -10%, rgba(255, 159, 69, 0.18), transparent 60%),
     radial-gradient(820px 520px at 95% 10%, rgba(69, 213, 232, 0.1), transparent 55%),
     radial-gradient(700px 500px at 50% 110%, rgba(255, 215, 94, 0.07), transparent 55%),
     linear-gradient(180deg, var(--bg-1), var(--bg-0));
@@ -91,13 +91,13 @@ body {
 .brand .logo {
   font-size: 34px;
   line-height: 1;
-  filter: drop-shadow(0 0 12px rgba(124, 108, 255, 0.7));
+  filter: drop-shadow(0 0 12px rgba(255, 159, 69, 0.7));
 }
 .brand-text h1 {
   font-size: 22px;
   font-weight: 800;
   letter-spacing: 0.06em;
-  background: linear-gradient(115deg, #b8aeff 0%, var(--primary) 40%, var(--gold) 100%);
+  background: linear-gradient(115deg, #ffcf7a 0%, var(--primary) 40%, var(--gold) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -203,9 +203,9 @@ body {
   font-family: var(--font-sans);
   font-size: 12.5px;
   font-weight: 700;
-  color: #fff;
-  background: linear-gradient(150deg, rgba(124, 108, 255, 0.85), rgba(124, 108, 255, 0.55));
-  border: 1px solid rgba(124, 108, 255, 0.5);
+  color: #2a1800;
+  background: linear-gradient(150deg, rgba(255, 195, 107, 0.95), rgba(255, 159, 69, 0.75));
+  border: 1px solid rgba(255, 159, 69, 0.5);
   border-radius: 10px;
   cursor: pointer;
   transition: transform 0.08s ease, filter 0.12s ease;
@@ -213,9 +213,9 @@ body {
 .btns button:hover { filter: brightness(1.15); }
 .btns button:active { transform: translateY(2px); }
 .btns button#btn-codex {
-  background: linear-gradient(150deg, rgba(255, 215, 94, 0.9), rgba(255, 180, 60, 0.7));
-  border-color: rgba(255, 215, 94, 0.5);
-  color: #3a2c00;
+  background: linear-gradient(150deg, rgba(110, 190, 255, 0.85), rgba(80, 150, 230, 0.65));
+  border-color: rgba(110, 190, 255, 0.45);
+  color: #06182e;
 }
 .btns button.off {
   background: var(--glass-strong);
@@ -250,10 +250,10 @@ body {
   max-height: calc(100dvh - 120px);
   aspect-ratio: 480 / 720;
   border-radius: var(--radius);
-  border: 1px solid rgba(124, 108, 255, 0.4);
+  border: 1px solid rgba(255, 159, 69, 0.4);
   box-shadow:
-    0 0 0 1px rgba(124, 108, 255, 0.15),
-    0 0 32px rgba(124, 108, 255, 0.25),
+    0 0 0 1px rgba(255, 159, 69, 0.15),
+    0 0 32px rgba(255, 159, 69, 0.25),
     var(--shadow-lg);
   touch-action: none;
   cursor: crosshair;
@@ -330,7 +330,7 @@ body {
 }
 .lb-tabs button.active {
   background: var(--primary-soft);
-  color: #c9c2ff;
+  color: #ffd9a0;
 }
 .lb-list {
   list-style: none;
@@ -360,7 +360,7 @@ body {
   min-width: 22px;
   text-align: center;
   font-weight: 700;
-  color: #c9c2ff;
+  color: #ffd9a0;
 }
 .lb-rank.lb-dot { color: var(--ink-dim); }
 .lb-badge {
@@ -372,7 +372,7 @@ body {
 }
 .lb-badge.agent {
   background: var(--primary-soft);
-  color: #c9c2ff;
+  color: #ffd9a0;
 }
 .lb-badge.human {
   background: rgba(69, 213, 232, 0.15);
@@ -420,7 +420,7 @@ body {
 #lb-name::placeholder { color: var(--ink-dim); }
 #lb-name:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(124, 108, 255, 0.2);
+  box-shadow: 0 0 0 3px rgba(255, 159, 69, 0.2);
 }
 .lb-note {
   font-size: 11px;
@@ -439,13 +439,13 @@ body {
 .agent-btns { margin-bottom: 8px; }
 .agent-btns button#btn-agent-invite {
   grid-column: 1 / -1;
-  background: linear-gradient(150deg, #8f81ff, var(--primary));
-  box-shadow: 0 0 20px rgba(124, 108, 255, 0.35);
+  background: linear-gradient(150deg, #ffc36b, var(--primary));
+  box-shadow: 0 0 20px rgba(255, 159, 69, 0.35);
 }
 .agent-status {
   font-size: 12px;
   font-weight: 600;
-  color: #b8aeff;
+  color: #ffcf7a;
   min-height: 1.2em;
   margin: 6px 0 4px;
   line-height: 1.5;
@@ -510,7 +510,7 @@ body {
   height: 7px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--primary), var(--cyan));
-  box-shadow: 0 0 8px rgba(124, 108, 255, 0.6);
+  box-shadow: 0 0 8px rgba(255, 159, 69, 0.6);
 }
 .rules-sub {
   font-size: 12px;
@@ -545,7 +545,7 @@ body {
 }
 .agent-watch-block .agent-phase {
   font-weight: 700;
-  color: #b8aeff;
+  color: #ffcf7a;
 }
 .event-log {
   list-style: none;
@@ -578,9 +578,9 @@ body {
   text-align: center;
   padding: 26px 30px;
   background: rgba(20, 24, 54, 0.92);
-  border: 1px solid rgba(124, 108, 255, 0.35);
+  border: 1px solid rgba(255, 159, 69, 0.35);
   border-radius: 18px;
-  box-shadow: var(--shadow-lg), 0 0 40px rgba(124, 108, 255, 0.2);
+  box-shadow: var(--shadow-lg), 0 0 40px rgba(255, 159, 69, 0.2);
   max-width: 86%;
 }
 .panel-box h2 {
@@ -634,11 +634,11 @@ body {
   font-size: 16px;
   font-weight: 700;
   color: #fff;
-  background: linear-gradient(150deg, #8f81ff, var(--primary));
+  background: linear-gradient(150deg, #ffc36b, var(--primary));
   border: none;
   border-radius: 12px;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(124, 108, 255, 0.4);
+  box-shadow: 0 6px 20px rgba(255, 159, 69, 0.4);
   transition: transform 0.08s ease, filter 0.12s ease;
 }
 .big-btn:hover { filter: brightness(1.12); }
@@ -673,7 +673,7 @@ body {
 }
 .modal-box {
   background: rgba(20, 24, 54, 0.97);
-  border: 1px solid rgba(124, 108, 255, 0.3);
+  border: 1px solid rgba(255, 159, 69, 0.3);
   border-radius: 18px;
   padding: 22px;
   max-width: 560px;
