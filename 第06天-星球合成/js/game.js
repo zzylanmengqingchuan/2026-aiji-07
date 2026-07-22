@@ -2,6 +2,12 @@
 /* ================= 主逻辑：状态机 / 输入 / HUD / 循环 ================= */
 
 (function () {
+  // 观战模式由 spectate.js 接管，跳过本地单机
+  const _sp = new URLSearchParams(location.search);
+  if (_sp.get('spectate') === '1' || _sp.get('spectate') === 'true' || window.__SUIKA_SPECTATE__) {
+    return;
+  }
+
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const nextCanvas = document.getElementById('next');

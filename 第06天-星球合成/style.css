@@ -265,6 +265,76 @@ body {
   text-align: center;
 }
 
+/* Agent 入口 */
+.panel-agent .agent-desc {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  line-height: 1.45;
+  margin-bottom: 10px;
+}
+.agent-btns {
+  margin-bottom: 8px;
+}
+.agent-btns button#btn-agent-invite {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 3px 0 color-mix(in oklch, var(--primary) 55%, black);
+  grid-column: 1 / -1;
+}
+.agent-share {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--foreground);
+  background: color-mix(in oklch, var(--muted) 80%, transparent);
+  border: 2px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  resize: vertical;
+  min-height: 90px;
+}
+.agent-copy {
+  margin-top: 8px;
+  width: 100%;
+}
+.agent-link {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  word-break: break-all;
+  text-align: center;
+}
+
+.agent-watch-block .agent-room,
+.agent-watch-block .agent-phase,
+.agent-watch-block .agent-player {
+  font-size: 12px;
+  margin: 4px 0;
+  color: var(--muted-foreground);
+}
+.agent-watch-block .agent-phase {
+  font-weight: 700;
+  color: var(--primary);
+}
+.event-log {
+  list-style: none;
+  max-height: 160px;
+  overflow-y: auto;
+  text-align: left;
+  font-size: 11px;
+  line-height: 1.4;
+  margin-top: 6px;
+}
+.event-log li {
+  padding: 4px 0;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 35%, transparent);
+  color: var(--muted-foreground);
+}
+
 /* ===== 右侧对战区 ===== */
 #stage {
   position: relative;
