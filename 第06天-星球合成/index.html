@@ -54,14 +54,15 @@
 
       <section class="panel-agent card-block">
         <div class="section-title">Agent 入口</div>
-        <p class="agent-desc">让 Codex 等 Agent 来玩：开房后复制说明，人类打开观战页看合成过程。</p>
+        <p class="agent-desc">1. 邀请 Agent 开房　2. 复制文案发给 Codex　3. 打开观战页看合成过程</p>
         <div class="btns agent-btns">
           <button id="btn-agent-invite" type="button">🤖 邀请 Agent</button>
           <button id="btn-agent-docs" type="button">📄 Agent 文档</button>
         </div>
-        <textarea id="agent-share-text" class="agent-share" readonly rows="6" placeholder="点击「邀请 Agent」生成可复制文案…"></textarea>
+        <p id="agent-status" class="agent-status" aria-live="polite"></p>
+        <textarea id="agent-share-text" class="agent-share" readonly rows="6" placeholder="点击「邀请 Agent」或「复制给 Agent」生成文案…"></textarea>
         <button id="btn-agent-copy" type="button" class="ghost-btn agent-copy">复制给 Agent</button>
-        <a id="agent-spectate-link" class="agent-link" href="#" target="_blank" rel="noopener">观战页将显示在这里</a>
+        <a id="agent-spectate-link" class="agent-link" href="#" target="_blank" rel="noopener" style="display:none">打开观战页</a>
       </section>
     </aside>
 
