@@ -1,0 +1,986 @@
+/* ===== 基础 ===== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:root {
+  --bg: #faf8ef;
+  --bg-soft: #f0e9d8;
+  --text: #776e65;
+  --text-dark: #776e65;
+  --text-light: #f9f6f2;
+  --board: #bbada0;
+  --empty: #cdc1b4;
+  --primary: #8f7a66;
+  --accent: #edc22e;
+  --win: #27ae60;
+  --lose: #c0392b;
+  --shadow: 0 4px 20px rgba(119, 110, 101, 0.15);
+  --radius: 12px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --font: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app {
+  height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ===== 屏幕切换 ===== */
+.screen {
+  display: none;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px 16px calc(16px + var(--safe-bottom));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.screen.active {
+  display: flex;
+}
+
+/* ===== 按钮 ===== */
+.btn {
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: transform 0.12s, opacity 0.12s, background 0.15s;
+  touch-action: manipulation;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--text-light);
+  width: 100%;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #7a6856;
+}
+
+.btn-secondary {
+  background: var(--board);
+  color: var(--text-light);
+  flex: 1;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #a99a8c;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  font-size: 22px;
+  padding: 8px 12px;
+  min-width: 44px;
+  line-height: 1;
+}
+
+/* ===== 介绍页 ===== */
+#screen-intro {
+  justify-content: center;
+  align-items: center;
+}
+
+.intro-card {
+  width: 100%;
+  background: #fff;
+  border-radius: 20px;
+  padding: 28px 22px 24px;
+  box-shadow: var(--shadow);
+}
+
+.logo {
+  font-size: 56px;
+  font-weight: 800;
+  text-align: center;
+  color: #776e65;
+  letter-spacing: 2px;
+  line-height: 1;
+  background: linear-gradient(135deg, #f2b179, #edc22e, #f67c5f);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.tagline {
+  text-align: center;
+  margin: 8px 0 16px;
+  font-size: 14px;
+  color: #a89f94;
+}
+
+.wasd-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.wasd-preview .wasd-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.key-cap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: #fff;
+  border: 2px solid #bbada0;
+  font-weight: 800;
+  font-size: 16px;
+  color: #776e65;
+  box-shadow: 0 2px 0 #bbada0;
+}
+
+.wasd-preview small {
+  font-size: 11px;
+  color: #a89f94;
+  width: 16px;
+}
+
+.control-note {
+  text-align: center;
+  font-size: 13px;
+  color: #8a8178;
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+.control-note strong {
+  color: #e67e22;
+  font-size: 15px;
+}
+
+.btn-skip {
+  width: 100%;
+  margin-top: 10px;
+  background: transparent;
+  color: #a89f94;
+  border: 1px solid #ddd5c8;
+}
+
+.btn-skip:hover:not(:disabled) {
+  background: var(--bg-soft);
+  color: var(--text);
+}
+
+.btn-re-tutor {
+  width: 100%;
+  margin-bottom: 14px;
+  background: #fff;
+  color: var(--text);
+  border: 1px dashed #bbada0;
+  box-shadow: none;
+}
+
+.tip-box {
+  margin: 8px 0 18px;
+  padding: 14px 16px;
+  background: #fff8e7;
+  border-radius: 12px;
+  border-left: 4px solid var(--accent);
+}
+
+.tip-box strong {
+  display: block;
+  font-size: 14px;
+  color: #c49a1a;
+  margin-bottom: 6px;
+}
+
+.tip-box p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #8a8178;
+}
+
+/* ===== 顶栏 ===== */
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  min-height: 44px;
+}
+
+.top-bar h1 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.spacer {
+  width: 44px;
+}
+
+.game-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+#level-badge {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+#level-name {
+  font-size: 12px;
+  color: #a89f94;
+}
+
+/* ===== 关卡列表 ===== */
+.levels-hint {
+  text-align: center;
+  font-size: 13px;
+  color: #a89f94;
+  margin-bottom: 16px;
+}
+
+.level-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 24px;
+}
+
+.level-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.15s;
+  border: 2px solid transparent;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  width: 100%;
+}
+
+.level-card:active {
+  transform: scale(0.98);
+}
+
+.level-card.cleared {
+  border-color: #a8e6c3;
+}
+
+.level-card.locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.level-num {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.level-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.level-info h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.level-info p {
+  font-size: 12px;
+  color: #a89f94;
+  line-height: 1.45;
+}
+
+.level-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chip {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: var(--bg-soft);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.chip.goal {
+  background: #fff3cd;
+  color: #b8860b;
+}
+
+.level-status {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+/* ===== 游戏内提示条 ===== */
+.game-tip {
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+  color: #8a8178;
+  background: #f5f0e6;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  min-height: 2.6em;
+  transition: background 0.15s, color 0.15s;
+}
+
+.game-tip.warn {
+  background: #fdecea;
+  color: #c0392b;
+  font-weight: 600;
+}
+
+/* ===== 游戏统计 ===== */
+.stats {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.stat {
+  flex: 1;
+  background: var(--board);
+  border-radius: 10px;
+  padding: 8px 6px;
+  text-align: center;
+  color: var(--text-light);
+}
+
+.stat.goal {
+  background: linear-gradient(135deg, #f2b179, #f67c5f);
+}
+
+.stat-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+  margin-bottom: 2px;
+}
+
+.stat-value {
+  display: block;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* ===== 棋盘 ===== */
+.board-wrap {
+  position: relative;
+  width: 100%;
+  margin: 0 auto;
+  flex-shrink: 0;
+}
+
+.board {
+  position: relative;
+  width: 100%;
+  background: var(--board);
+  border-radius: 10px;
+  padding: 3.5%;
+  touch-action: none;
+}
+
+.grid {
+  display: grid;
+  gap: 3.5%;
+  width: 100%;
+}
+
+.grid-size-3 {
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.grid-size-4 {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+}
+
+.grid-size-5 {
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+}
+
+.cell {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background: var(--empty);
+  position: relative;
+}
+
+.tile {
+  position: absolute;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: var(--text-dark);
+  transition: transform 0.12s ease-in-out;
+  z-index: 2;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.08);
+}
+
+.tile.new {
+  animation: pop-in 0.18s ease-out;
+}
+
+.tile.merged {
+  animation: pop-merge 0.18s ease-out;
+}
+
+@keyframes pop-in {
+  0% { transform: scale(0); }
+  80% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+@keyframes pop-merge {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+/* 数字颜色 */
+.tile-2    { background: #eee4da; color: #776e65; }
+.tile-4    { background: #ede0c8; color: #776e65; }
+.tile-8    { background: #f2b179; color: #f9f6f2; }
+.tile-16   { background: #f59563; color: #f9f6f2; }
+.tile-32   { background: #f67c5f; color: #f9f6f2; }
+.tile-64   { background: #f65e3b; color: #f9f6f2; }
+.tile-128  { background: #edcf72; color: #f9f6f2; }
+.tile-256  { background: #edcc61; color: #f9f6f2; }
+.tile-512  { background: #edc850; color: #f9f6f2; }
+.tile-1024 { background: #edc53f; color: #f9f6f2; }
+.tile-2048 { background: #edc22e; color: #f9f6f2; }
+.tile-4096 { background: #3c3a32; color: #f9f6f2; }
+.tile-8192 { background: #2a2822; color: #f9f6f2; }
+.tile-super { background: #1a1814; color: #f9f6f2; }
+
+/* ===== 覆盖层 ===== */
+.overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(238, 228, 218, 0.78);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  backdrop-filter: blur(2px);
+  animation: fade-in 0.25s ease;
+}
+
+.overlay.hidden {
+  display: none;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.overlay-card {
+  text-align: center;
+  padding: 20px;
+  max-width: 90%;
+}
+
+.overlay-card h2 {
+  font-size: 32px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.overlay-card.win h2 {
+  color: var(--win);
+}
+
+.overlay-card.lose h2 {
+  color: var(--lose);
+}
+
+.overlay-card p {
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+
+.overlay-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.overlay-actions .btn {
+  width: 100%;
+}
+
+/* ===== 底部操作 ===== */
+.controls-hint {
+  text-align: center;
+  font-size: 12px;
+  color: #b0a99f;
+  margin: 10px 0 8px;
+}
+
+.controls-hint kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 6px;
+  margin: 0 1px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background: #fff;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 12px;
+  color: #776e65;
+  box-shadow: 0 1px 0 #ccc;
+}
+
+.game-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+/* ===== WASD 屏幕按键 ===== */
+.wasd-pad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+  flex-shrink: 0;
+}
+
+.wasd-pad-row {
+  display: flex;
+  gap: 8px;
+}
+
+.wasd-btn {
+  width: 64px;
+  height: 56px;
+  border: none;
+  border-radius: 12px;
+  background: #8f7a66;
+  color: #f9f6f2;
+  font-size: 20px;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  box-shadow: 0 3px 0 #6d5c4d;
+  transition: transform 0.08s, background 0.12s, box-shadow 0.08s;
+  touch-action: manipulation;
+  line-height: 1.1;
+}
+
+.wasd-btn span {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.wasd-btn:active,
+.wasd-btn.pressed {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #6d5c4d;
+}
+
+.wasd-btn.highlight {
+  background: #e67e22;
+  box-shadow: 0 3px 0 #b85f12;
+  animation: key-pulse 1s ease-in-out infinite;
+}
+
+.wasd-btn.wrong {
+  background: #c0392b;
+  box-shadow: 0 3px 0 #922b21;
+}
+
+@keyframes key-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+/* ===== 引导 / 动画演示 ===== */
+#screen-tutorial {
+  overflow-y: auto;
+}
+
+.coach-bubble {
+  background: #fff;
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  border: 2px solid #f0e9d8;
+}
+
+.coach-bubble p {
+  font-size: 14px;
+  line-height: 1.65;
+  color: #5c554e;
+}
+
+.coach-bubble p strong {
+  color: #e67e22;
+}
+
+.demo-bubble {
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.demo-title-text {
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  color: #776e65 !important;
+  margin-bottom: 6px;
+}
+
+.demo-progress {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.demo-progress .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ddd5c8;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.demo-progress .dot.active {
+  background: #e67e22;
+  transform: scale(1.3);
+}
+
+.demo-progress .dot.done {
+  background: #27ae60;
+}
+
+.demo-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+
+.demo-verdict {
+  min-height: 28px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.demo-verdict.ok {
+  color: #27ae60;
+}
+
+.demo-verdict.no {
+  color: #c0392b;
+}
+
+.demo-key-show {
+  min-height: 48px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.demo-key {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 48px;
+  border-radius: 12px;
+  background: #e67e22;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 800;
+  box-shadow: 0 3px 0 #b85f12;
+  line-height: 1.1;
+}
+
+.demo-key small {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.demo-key.press {
+  animation: key-pulse 0.5s ease-in-out infinite;
+}
+
+.demo-key.ok {
+  background: #27ae60;
+  box-shadow: 0 3px 0 #1e8449;
+  animation: none;
+}
+
+.demo-key.fail {
+  background: #c0392b;
+  box-shadow: 0 3px 0 #922b21;
+  animation: none;
+}
+
+.demo-caption {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #8a8178;
+  text-align: center;
+  min-height: 1.4em;
+  font-weight: 600;
+}
+
+.demo-board.shake {
+  animation: board-shake 0.4s ease;
+}
+
+@keyframes board-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.demo-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.demo-actions .btn {
+  flex: 1;
+}
+
+.btn-skip-demo {
+  width: 100%;
+  margin-top: 8px;
+  background: transparent;
+  color: #a89f94;
+  border: 1px solid #ddd5c8;
+  box-shadow: none;
+}
+
+.board-wrap-tutor {
+  max-width: 260px;
+  width: 100%;
+}
+
+/* 无效方向：灰色 */
+.wasd-btn.disabled-dir {
+  background: #cfc6ba;
+  box-shadow: 0 3px 0 #b5ab9e;
+  opacity: 0.55;
+}
+
+.wasd-btn.disabled-dir:active {
+  transform: none;
+}
+
+.board-wrap-tutor {
+  max-width: 280px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.tutor-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  padding-bottom: 8px;
+}
+
+.tutor-actions .btn {
+  flex: 1;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.feedback-ok {
+  color: #27ae60 !important;
+  font-weight: 700;
+}
+
+.feedback-bad {
+  color: #c0392b !important;
+}
+
+/* ===== 帮助弹层 ===== */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+  animation: fade-in 0.2s ease;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px 20px;
+  max-width: 360px;
+  width: 100%;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-card h2 {
+  font-size: 18px;
+  margin-bottom: 14px;
+  color: var(--text);
+}
+
+#help-content {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #8a8178;
+  margin-bottom: 20px;
+}
+
+#help-content p {
+  margin-bottom: 8px;
+}
+
+#help-content strong {
+  color: var(--text);
+}
+
+/* 棋盘比例：根据格子数调整最大宽度下的高度 */
+.board::before {
+  content: "";
+  display: block;
+  padding-top: 100%;
+}
+
+.board .grid {
+  position: absolute;
+  inset: 3.5%;
+  width: auto;
+  height: auto;
+}
+
+/* 字体随格子大小缩放 */
+.tile.fs-lg { font-size: clamp(18px, 7vw, 36px); }
+.tile.fs-md { font-size: clamp(14px, 5.5vw, 28px); }
+.tile.fs-sm { font-size: clamp(12px, 4.5vw, 22px); }
+.tile.fs-xs { font-size: clamp(10px, 3.5vw, 16px); }
+
+/* 窄屏优化 */
+@media (max-height: 700px) {
+  .intro-card {
+    padding: 20px 18px 18px;
+  }
+  .logo {
+    font-size: 44px;
+  }
+  .stat-value {
+    font-size: 17px;
+  }
+}
+
+@media (min-width: 480px) {
+  body {
+    background: #efe8d8;
+  }
+  #app {
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.06);
+    background: var(--bg);
+  }
+}

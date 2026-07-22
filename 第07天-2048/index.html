@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#faf8ef" />
+  <title>2048 新手闯关</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- 开场 -->
+    <section id="screen-intro" class="screen active">
+      <div class="intro-card">
+        <div class="logo">2048</div>
+        <p class="tagline">动画演示 · 看懂再玩</p>
+
+        <div class="wasd-preview" aria-hidden="true">
+          <div class="wasd-row"><span class="key-cap">W</span><small>上</small></div>
+          <div class="wasd-row">
+            <span class="key-cap">A</span><small>左</span>
+            <span class="key-cap">S</span><small>下</span>
+            <span class="key-cap">D</span><small>右</span>
+          </div>
+        </div>
+        <p class="control-note">操作键：<strong>W A S D</strong>（不用方向键）</p>
+
+        <div class="tip-box">
+          <strong>先看动画教程</strong>
+          <p>一共 7 个短动画，专门讲：什么时候能移动、什么时候动不了、为什么会「卡住满盘」。看完再闯关会轻松很多。</p>
+        </div>
+
+        <button class="btn btn-primary" id="btn-tutorial">看动画教程（强烈推荐）</button>
+        <button class="btn btn-secondary btn-skip" id="btn-skip-tutorial">跳过，直接闯关</button>
+      </div>
+    </section>
+
+    <!-- 动画教程 -->
+    <section id="screen-tutorial" class="screen">
+      <header class="top-bar">
+        <button class="btn btn-ghost" id="btn-tutorial-back" aria-label="返回">←</button>
+        <div class="game-title">
+          <span id="demo-label">动画 1/7</span>
+          <span id="demo-name">整体滑动</span>
+        </div>
+        <span class="spacer"></span>
+      </header>
+
+      <div class="demo-progress" id="demo-progress"></div>
+
+      <div class="coach-bubble demo-bubble">
+        <p id="demo-title" class="demo-title-text"></p>
+        <p id="demo-text"></p>
+      </div>
+
+      <div class="demo-stage">
+        <div class="demo-verdict" id="demo-verdict" aria-live="polite"></div>
+        <div class="demo-key-show" id="demo-key-show"></div>
+        <div class="board-wrap board-wrap-tutor">
+          <div id="demo-board" class="board demo-board" aria-label="演示棋盘"></div>
+        </div>
+        <div class="demo-caption" id="demo-caption">准备播放…</div>
+      </div>
+
+      <div class="tutor-actions demo-actions">
+        <button class="btn btn-secondary" id="btn-demo-replay" type="button">↺ 重播动画</button>
+        <button class="btn btn-primary" id="btn-demo-next" type="button">下一个动画</button>
+      </div>
+      <button class="btn btn-secondary btn-skip-demo" id="btn-demo-skip-all" type="button">跳过剩余动画</button>
+    </section>
+
+    <!-- 关卡选择 -->
+    <section id="screen-levels" class="screen">
+      <header class="top-bar">
+        <button class="btn btn-ghost" id="btn-back-intro" aria-label="返回">←</button>
+        <h1>选择关卡</h1>
+        <span class="spacer"></span>
+      </header>
+      <p class="levels-hint">用 <strong>W A S D</strong> · 棋盘下方会提示<strong>哪些方向现在能动</strong></p>
+      <button class="btn btn-secondary btn-re-tutor" id="btn-re-tutorial">再看一遍动画教程</button>
+      <div id="level-list" class="level-list"></div>
+    </section>
+
+    <!-- 正式游戏 -->
+    <section id="screen-game" class="screen">
+      <header class="top-bar">
+        <button class="btn btn-ghost" id="btn-back-levels" aria-label="返回关卡">←</button>
+        <div class="game-title">
+          <span id="level-badge">第 1 关</span>
+          <span id="level-name">入门体验</span>
+        </div>
+        <button class="btn btn-ghost" id="btn-help" aria-label="帮助">?</button>
+      </header>
+
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-label">得分</span>
+          <span class="stat-value" id="score">0</span>
+        </div>
+        <div class="stat goal">
+          <span class="stat-label">目标</span>
+          <span class="stat-value" id="goal">64</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">最佳</span>
+          <span class="stat-value" id="best">0</span>
+        </div>
+      </div>
+
+      <div id="game-tip" class="game-tip">看下方橙色键 = 现在能走的方向</div>
+
+      <div class="board-wrap">
+        <div id="board" class="board" aria-label="游戏棋盘"></div>
+        <div id="overlay" class="overlay hidden">
+          <div class="overlay-card">
+            <h2 id="overlay-title">通关！</h2>
+            <p id="overlay-msg"></p>
+            <div class="overlay-actions">
+              <button class="btn btn-secondary" id="btn-retry">再玩一次</button>
+              <button class="btn btn-primary" id="btn-next">下一关</button>
+              <button class="btn btn-secondary" id="btn-to-levels">关卡列表</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls-hint" id="valid-dirs-hint">
+        现在能走的方向会亮起
+      </div>
+
+      <div class="wasd-pad" id="game-wasd">
+        <div class="wasd-pad-row">
+          <button type="button" class="wasd-btn" data-dir="up" data-key="W">W<span>上</span></button>
+        </div>
+        <div class="wasd-pad-row">
+          <button type="button" class="wasd-btn" data-dir="left" data-key="A">A<span>左</span></button>
+          <button type="button" class="wasd-btn" data-dir="down" data-key="S">S<span>下</span></button>
+          <button type="button" class="wasd-btn" data-dir="right" data-key="D">D<span>右</span></button>
+        </div>
+      </div>
+
+      <div class="game-actions">
+        <button class="btn btn-secondary" id="btn-restart">重新开始</button>
+        <button class="btn btn-secondary" id="btn-undo" disabled>撤销一步</button>
+      </div>
+    </section>
+
+    <!-- 帮助弹层 -->
+    <div id="help-modal" class="modal hidden">
+      <div class="modal-card">
+        <h2>本关说明</h2>
+        <div id="help-content"></div>
+        <button class="btn btn-primary" id="btn-close-help">知道了</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
