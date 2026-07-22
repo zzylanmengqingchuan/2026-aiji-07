@@ -532,9 +532,11 @@ const server = http.createServer(async (req, res) => {
       }
       const ext = path.extname(filePath).toLowerCase();
       const type = MIME[ext] || 'application/octet-stream';
+      // html/js/css 禁止缓存，避免「复制没东西」仍跑旧脚本
+      const noCache = ext === '.html' || ext === '.js' || ext === '.css';
       res.writeHead(200, {
         'Content-Type': type,
-        'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600',
+        'Cache-Control': noCache ? 'no-store, no-cache, must-revalidate' : 'public, max-age=3600',
       });
       fs.createReadStream(filePath).pipe(res);
     });

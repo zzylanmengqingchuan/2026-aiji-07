@@ -297,20 +297,29 @@ body {
 .agent-share {
   width: 100%;
   margin-top: 8px;
-  padding: 8px;
+  padding: 10px;
   font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.4;
   color: var(--foreground);
-  background: color-mix(in oklch, var(--muted) 80%, transparent);
+  background: #fff;
   border: 2px solid var(--border);
   border-radius: calc(var(--radius) - 4px);
   resize: vertical;
-  min-height: 90px;
+  min-height: 140px;
+  max-height: 240px;
   /* 覆盖 body 的 user-select:none，否则无法选中/复制 */
-  user-select: text;
-  -webkit-user-select: text;
+  user-select: text !important;
+  -webkit-user-select: text !important;
   cursor: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+@media (prefers-color-scheme: dark) {
+  .agent-share {
+    background: oklch(0.2 0.02 257);
+    color: #fff;
+  }
 }
 .agent-copy {
   margin-top: 8px;
