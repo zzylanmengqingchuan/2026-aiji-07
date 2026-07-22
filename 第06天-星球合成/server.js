@@ -27,6 +27,56 @@ const RESULT_TTL_MS = 30 * 60 * 1000;
 const rooms = new Map(); // code -> GameSession
 const resultArchive = new Map(); // code -> result
 
+// ---- 成绩持久化（JSONL，无需数据库）----
+const DATA_DIR = path.join(ROOT, 'data');
+const RESULTS_FILE = path.join(DATA_DIR, 'results.jsonl');
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+function persistResult(rec) {
+  try {
+    fs.appendFileSync(RESULTS_FILE, JSON.stringify(rec) + '\n');
+  } catch (e) {
+    console.error('[persistResult]', e.message);
+  }
+}
+
+function readResults() {
+  let lines;
+  try {
+    lines = fs.readFileSync(RESULTS_FILE, 'utf8').split('\n');
+  } catch (e) {
+    return [];
+  }
+  const out = [];
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    try {
+      out.push(JSON.parse(line));
+    } catch (e) {
+      /* 跳过坏行 */
+    }
+  }
+  return out;
+}
+
+function resultRecord(room) {
+  const r = room.result;
+  const p = r.player || {};
+  return {
+    code: r.code,
+    name: String(p.name || 'Agent').slice(0, 24),
+    kind: p.kind === 'human' ? 'human' : 'agent',
+    agentId: p.agentId || null,
+    score: r.score,
+    drops: r.drops,
+    maxLevelName: r.maxLevelName,
+    sunBorn: r.sunBorn,
+    annihilations: r.annihilations,
+    durationSec: r.durationSec,
+    finishedAt: r.finishedAt,
+  };
+}
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
@@ -157,6 +207,10 @@ function ensureRoom(code) {
 function archiveIfOver(room) {
   if (room.phase === 'over' && room.result) {
     resultArchive.set(room.code, room.result);
+    if (!room._persisted) {
+      room._persisted = true;
+      persistResult(resultRecord(room));
+    }
   }
 }
 
@@ -269,6 +323,9 @@ async function handleApi(req, res, url) {
         },
         'GET /api/v1/rooms/:code/result': '终局结果（结束后约 30 分钟可查）',
         'GET /api/v1/rooms/:code': '房间摘要',
+        'GET /api/v1/leaderboard?kind=all|agent|human&limit=30': '排行榜（分数降序）',
+        'GET /api/v1/history?name=xx&limit=50': '个人历史（分数降序）',
+        'POST /api/v1/scores': { body: { name: 'string', score: 'number', maxLevelName: 'string?' }, note: '人类成绩上报（荣誉制）' },
       },
       coordinate: {
         note: '2D Canvas 逻辑像素，原点左上，x 向右，y 向下',
@@ -282,6 +339,73 @@ async function handleApi(req, res, url) {
       },
       rateHint: '建议 5～15 次 state/秒；drop 冷却 0.55s，勿在 canDrop=false 时狂 drop',
     });
+    return true;
+  }
+
+  // GET /api/v1/leaderboard?kind=all|agent|human&limit=30 —— 排行榜（分数降序）
+  if (req.method === 'GET' && p === '/api/v1/leaderboard') {
+    const kind = (url.searchParams.get('kind') || 'all').toLowerCase();
+    const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '30', 10) || 30, 1), 100);
+    let items = readResults();
+    if (kind === 'agent' || kind === 'human') items = items.filter((r) => r.kind === kind);
+    items.sort((a, b) => b.score - a.score || a.finishedAt - b.finishedAt);
+    sendJson(res, 200, {
+      ok: true,
+      kind,
+      total: items.length,
+      items: items.slice(0, limit).map((r, i) => ({ rank: i + 1, ...r })),
+    });
+    return true;
+  }
+
+  // GET /api/v1/history?name=xx&limit=50 —— 个人历史（分数降序）
+  if (req.method === 'GET' && p === '/api/v1/history') {
+    const name = String(url.searchParams.get('name') || '').trim();
+    if (!name) {
+      sendJson(res, 400, { ok: false, err: '缺少 name' });
+      return true;
+    }
+    const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '50', 10) || 50, 1), 200);
+    const items = readResults()
+      .filter((r) => r.name === name)
+      .sort((a, b) => b.score - a.score || a.finishedAt - b.finishedAt);
+    sendJson(res, 200, { ok: true, name, total: items.length, items: items.slice(0, limit) });
+    return true;
+  }
+
+  // POST /api/v1/scores —— 人类成绩上报（荣誉制；Agent 成绩由服务端自动权威记录）
+  if (req.method === 'POST' && p === '/api/v1/scores') {
+    let body;
+    try {
+      body = await readBody(req);
+    } catch (e) {
+      sendJson(res, 400, { ok: false, err: e.message });
+      return true;
+    }
+    const name = String(body.name || '').trim().slice(0, 24);
+    const score = Math.floor(Number(body.score));
+    if (!name) {
+      sendJson(res, 400, { ok: false, err: '缺少 name' });
+      return true;
+    }
+    if (!Number.isFinite(score) || score < 0 || score > 10000000) {
+      sendJson(res, 400, { ok: false, err: 'score 非法' });
+      return true;
+    }
+    persistResult({
+      code: null,
+      name,
+      kind: 'human',
+      agentId: null,
+      score,
+      drops: Math.max(0, Math.floor(Number(body.drops) || 0)) || null,
+      maxLevelName: String(body.maxLevelName || '').slice(0, 8) || null,
+      sunBorn: null,
+      annihilations: null,
+      durationSec: null,
+      finishedAt: Date.now(),
+    });
+    sendJson(res, 200, { ok: true });
     return true;
   }
 

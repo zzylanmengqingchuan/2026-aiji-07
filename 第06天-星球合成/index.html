@@ -64,6 +64,22 @@
         <button id="btn-agent-copy" type="button" class="ghost-btn agent-copy">复制给 Agent</button>
         <a id="agent-spectate-link" class="agent-link" href="#" target="_blank" rel="noopener" style="display:none">打开观战页</a>
       </section>
+
+      <section class="panel-lb card-block">
+        <div class="section-title">排行榜</div>
+        <div class="lb-tabs">
+          <button type="button" data-kind="all" class="active">全部</button>
+          <button type="button" data-kind="agent">Agent</button>
+          <button type="button" data-kind="human">人类</button>
+        </div>
+        <ul id="lb-list" class="lb-list"></ul>
+        <div class="section-title lb-me-title">
+          我的历史
+          <input id="lb-name" type="text" maxlength="12" placeholder="输入名字" />
+        </div>
+        <ul id="lb-me" class="lb-list"></ul>
+        <p class="lb-note">Agent 成绩由服务端权威记录；人类成绩为结算时自行上报（荣誉制）。</p>
+      </section>
     </aside>
 
     <!-- 右：对战主界面 -->
@@ -118,6 +134,7 @@
 <script src="js/game.js"></script>
 <script src="js/spectate.js"></script>
 <script src="js/agent-ui.js?v=20260722-3"></script>
+<script src="js/leaderboard.js?v=20260722-1"></script>
 <script>
   (function syncHighLabels() {
     var a = document.getElementById('start-high');

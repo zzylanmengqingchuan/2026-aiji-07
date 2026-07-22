@@ -52,6 +52,7 @@
     fireworkT: 0,
     time: 0,
     newRecord: false,
+    maxLevelReached: 0,
   };
 
   highEl.textContent = game.high;
@@ -84,6 +85,7 @@
     game.danger = false;
     game.celebrateT = 0;
     game.newRecord = false;
+    game.maxLevelReached = 0;
     game.heldLevel = randLevel();
     game.nextLevel = randLevel();
     game.aimX = CFG.W / 2;
@@ -127,6 +129,11 @@
     overRecordEl.classList.toggle('hidden', !game.newRecord);
     updateHUD();
     ovOver.classList.remove('hidden');
+    // 上报排行榜（人类成绩，荣誉制）
+    if (window.SuikaLeaderboard && game.score > 0) {
+      const ml = LEVELS[game.maxLevelReached];
+      window.SuikaLeaderboard.onGameOver(game.score, ml ? ml.name : null);
+    }
   }
 
   function celebrate(x, y, big) {
@@ -160,6 +167,7 @@
 
       const L = LEVELS[ev.level];
       const colors = [L.light, L.base, '#ffffff'];
+      if (ev.level > game.maxLevelReached) game.maxLevelReached = ev.level;
 
       if (ev.type === 'annihilate') {
         const gained = 150 * game.combo;

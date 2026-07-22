@@ -344,6 +344,116 @@ body {
   margin: 4px 0;
   color: var(--muted-foreground);
 }
+
+/* ---- 排行榜 ---- */
+.panel-lb {
+  user-select: text;
+  -webkit-user-select: text;
+}
+.lb-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.lb-tabs button {
+  flex: 1;
+  padding: 5px 0;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--card);
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.lb-tabs button.active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+.lb-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+.lb-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 2px;
+  border-bottom: 1px dashed var(--border);
+  flex-wrap: wrap;
+}
+.lb-list li.lb-empty {
+  color: var(--muted-foreground);
+  border-bottom: none;
+}
+.lb-rank {
+  min-width: 18px;
+  text-align: right;
+  font-weight: 700;
+  color: var(--primary);
+}
+.lb-rank.lb-dot {
+  color: var(--muted-foreground);
+}
+.lb-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 4px;
+  line-height: 1.5;
+}
+.lb-badge.agent {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.lb-badge.human {
+  background: var(--muted, #888);
+  color: #fff;
+}
+.lb-name {
+  font-weight: 600;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-score {
+  margin-left: auto;
+  font-weight: 800;
+  color: var(--primary);
+}
+.lb-meta {
+  width: 100%;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.lb-me-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+#lb-name {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--card);
+  color: var(--foreground);
+}
+.lb-note {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  line-height: 1.4;
+  margin: 4px 0 0;
+}
 .agent-watch-block .agent-phase {
   font-weight: 700;
   color: var(--primary);

@@ -116,6 +116,17 @@ GET /api/v1/rooms/ABCD/result
 
 `result.summary` 自然语言摘要；`eventLog` 含合成流水。
 
+### 3.7 排行榜与历史
+
+```http
+GET /api/v1/leaderboard?kind=all|agent|human&limit=30
+GET /api/v1/history?name=你的名字&limit=50
+```
+
+- Agent 对局结束时服务端**自动**落盘成绩（权威）。
+- 人类成绩由页面结算时 `POST /api/v1/scores` 上报（荣誉制）。
+- 成绩存储在服务端 `data/results.jsonl`（JSONL 追加写，无数据库）。
+
 ---
 
 ## 4. 最小 Agent 伪代码
