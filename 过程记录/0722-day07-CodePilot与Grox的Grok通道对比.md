@@ -403,6 +403,8 @@ CLI 一扇门，agent stdio 一扇门，HTTP API 又一扇门。
 
 ## 十、参考链接
 
+- SuperGrok 订阅购买：https://pay.ldxp.cn/shop/mirage  
+- 本仓库工具清单（持续更新）：[工具与网站.md](../工具与网站.md)  
 - CodePilot 仓库：https://github.com/op7418/CodePilot  
 - CodePilot Releases（含 v0.59.0 Grok 双渠道、v0.59.1 OAuth 代理修复）：https://github.com/op7418/CodePilot/releases  
 - Grox 仓库：https://github.com/dandandujie/Grox  
