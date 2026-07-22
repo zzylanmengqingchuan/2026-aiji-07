@@ -3,155 +3,164 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#0b0e24">
-<title>星球合成 · 合成大太阳</title>
+<meta name="theme-color" content="#060608">
+<title>星球合成 · PLANET SYNTHESIS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="style.css?v=20260722-3">
+<link rel="stylesheet" href="style.css?v=20260722-cyber">
 </head>
 <body>
-<div class="stars" aria-hidden="true"></div>
 <div id="app">
 
-  <!-- 顶部导航 -->
-  <header class="site-nav">
+  <!-- 左侧导航 -->
+  <aside id="sidebar">
     <div class="brand">
       <span class="logo">🪐</span>
-      <div class="brand-text">
-        <h1>星球合成</h1>
-        <p>坠落 · 碰撞 · 合成 —— 点亮属于你的太阳</p>
-      </div>
+      <span class="brand-name">PLANET<br>SYNTHESIS</span>
     </div>
-    <nav class="mode-chips">
-      <span class="chip">🎮 人类单机</span>
-      <span class="chip">🤖 Agent 挑战</span>
-      <span class="chip">👀 实时观战</span>
+
+    <div class="commander">
+      <div class="label">COMMANDER</div>
+      <input id="lb-name" type="text" maxlength="12" placeholder="输入你的名字" />
+      <div class="rank-line">RANK: STAR VOYAGER</div>
+    </div>
+
+    <nav class="side-nav">
+      <button type="button" data-tab="stage" class="active"><span class="ico">🚀</span> Game Stage</button>
+      <button type="button" data-tab="lb"><span class="ico">🏆</span> Leaderboards</button>
+      <button type="button" data-tab="agent"><span class="ico">🤖</span> Agent Lab</button>
+      <button type="button" data-tab="rules"><span class="ico">📜</span> Protocol</button>
     </nav>
-  </header>
 
-  <!-- 三栏主区 -->
+    <div class="side-bottom">
+      <button id="btn-codex" type="button">📖 星球图鉴</button>
+      <button id="btn-sound" type="button">🔊 音效</button>
+      <button id="btn-pause" type="button">⏸ 暂停</button>
+      <button id="btn-restart" type="button">↻ 重开</button>
+    </div>
+  </aside>
+
+  <!-- 主区 -->
   <div id="main">
+    <header class="topbar">
+      <h2 class="page-title">GAME STAGE</h2>
+      <p class="sys-line">SYSTEM STATUS: <span class="ok">OPTIMAL</span> // SOURCE: NEURAL_LINK // 坠落·碰撞·合成——点亮属于你的太阳</p>
+      <nav class="mode-chips">
+        <span class="chip">🎮 人类单机</span>
+        <span class="chip">🤖 Agent 挑战</span>
+        <span class="chip">👀 实时观战</span>
+      </nav>
+    </header>
 
-    <!-- 左：HUD -->
-    <aside id="hud">
-      <section class="panel-stats">
-        <div class="card">
-          <div class="label">分数</div>
-          <div id="score" class="num">0</div>
-        </div>
-        <div class="card">
-          <div class="label">最高分</div>
-          <div id="high" class="num">0</div>
-        </div>
-      </section>
-
-      <section class="card next-card">
-        <div class="label">下一个</div>
+    <!-- 统计卡 -->
+    <section class="stat-row">
+      <div class="stat">
+        <div class="label">SCORE · 分数</div>
+        <div id="score" class="num">0</div>
+      </div>
+      <div class="stat">
+        <div class="label">BEST · 最高分</div>
+        <div id="high" class="num">0</div>
+      </div>
+      <div class="stat">
+        <div class="label">RECORD · 历史</div>
+        <div class="num num-dim"><span id="start-high">0</span></div>
+      </div>
+      <div class="stat next-stat">
+        <div class="label">NEXT · 下一个</div>
         <canvas id="next" width="96" height="96"></canvas>
-      </section>
+      </div>
+    </section>
 
-      <section class="hud-options">
-        <div class="btns">
-          <button id="btn-pause" type="button">⏸ 暂停</button>
-          <button id="btn-restart" type="button">↻ 重开</button>
-          <button id="btn-sound" type="button">🔊 音效</button>
-          <button id="btn-codex" type="button">📖 图鉴</button>
+    <div class="content-row">
+      <!-- 画布 -->
+      <div id="stage">
+        <canvas id="game" width="480" height="720"></canvas>
+
+        <div id="ov-start" class="overlay">
+          <div class="panel-box">
+            <h2>🪐 星球合成</h2>
+            <p class="tip">同色星球碰撞即可合成</p>
+            <p class="tip">挑战：合成出太阳！</p>
+            <p class="best-line">历史最高分：<span id="start-high-overlay">0</span></p>
+            <button id="btn-start" class="big-btn" type="button">开始游戏</button>
+          </div>
         </div>
-        <p class="best-line side-best">历史最高：<span id="start-high">0</span></p>
-        <p class="keys-hint">A / D 移动 · 空格落下 · P 暂停 · R 重开</p>
-      </section>
-    </aside>
 
-    <!-- 中：对战画布 -->
-    <div id="stage">
-      <canvas id="game" width="480" height="720"></canvas>
+        <div id="ov-pause" class="overlay hidden">
+          <div class="panel-box">
+            <h2>⏸ 已暂停</h2>
+            <button id="btn-resume" class="big-btn" type="button">继续游戏</button>
+            <button id="btn-restart-pause" class="ghost-btn" type="button">重新开始</button>
+          </div>
+        </div>
 
-      <div id="ov-start" class="overlay">
-        <div class="panel-box">
-          <h2>🪐 星球合成</h2>
-          <p class="tip">同色星球碰撞即可合成</p>
-          <p class="tip">挑战：合成出太阳！</p>
-          <p class="best-line">历史最高分：<span id="start-high-overlay">0</span></p>
-          <button id="btn-start" class="big-btn" type="button">开始游戏</button>
+        <div id="ov-over" class="overlay hidden">
+          <div class="panel-box">
+            <h2>💫 游戏结束</h2>
+            <p id="over-record" class="record hidden">🎉 新纪录！</p>
+            <p class="score-line">本局得分：<span id="over-score">0</span></p>
+            <p class="best-line">历史最高分：<span id="over-high">0</span></p>
+            <button id="btn-restart-over" class="big-btn" type="button">重新挑战</button>
+          </div>
         </div>
       </div>
 
-      <div id="ov-pause" class="overlay hidden">
-        <div class="panel-box">
-          <h2>⏸ 已暂停</h2>
-          <button id="btn-resume" class="big-btn" type="button">继续游戏</button>
-          <button id="btn-restart-pause" class="ghost-btn" type="button">重新开始</button>
+      <!-- 右：数据面板 -->
+      <aside id="panel">
+        <div class="pt-tabs">
+          <button type="button" data-tab="lb" class="active">🏆 排行榜</button>
+          <button type="button" data-tab="agent">🤖 Agent</button>
+          <button type="button" data-tab="rules">📜 规则</button>
         </div>
-      </div>
 
-      <div id="ov-over" class="overlay hidden">
-        <div class="panel-box">
-          <h2>💫 游戏结束</h2>
-          <p id="over-record" class="record hidden">🎉 新纪录！</p>
-          <p class="score-line">本局得分：<span id="over-score">0</span></p>
-          <p class="best-line">历史最高分：<span id="over-high">0</span></p>
-          <button id="btn-restart-over" class="big-btn" type="button">重新挑战</button>
+        <div class="pt-pane active" data-pane="lb">
+          <div class="lb-tabs">
+            <button type="button" data-kind="all" class="active">全部</button>
+            <button type="button" data-kind="agent">Agent</button>
+            <button type="button" data-kind="human">人类</button>
+          </div>
+          <ul id="lb-list" class="lb-list"></ul>
+          <div class="lb-me-title">我的历史</div>
+          <ul id="lb-me" class="lb-list"></ul>
+          <p class="lb-note">Agent 成绩由服务端权威记录；人类成绩为结算时自行上报（荣誉制）。</p>
         </div>
-      </div>
+
+        <div class="pt-pane" data-pane="agent">
+          <p class="agent-desc">1. 邀请 Agent 开房并自动复制文案　2. 把文案发给 Codex / Claude Code　3. 打开观战页看它打榜</p>
+          <div class="btns agent-btns">
+            <button id="btn-agent-invite" type="button">🤖 邀请 Agent</button>
+            <button id="btn-agent-docs" type="button">📄 Agent 文档</button>
+          </div>
+          <p id="agent-status" class="agent-status" aria-live="polite"></p>
+          <textarea id="agent-share-text" class="agent-share" readonly rows="6" placeholder="点击「邀请 Agent」或「复制给 Agent」生成文案…"></textarea>
+          <button id="btn-agent-copy" type="button" class="ghost-btn agent-copy">复制给 Agent</button>
+          <a id="agent-spectate-link" class="agent-link" href="#" target="_blank" rel="noopener" style="display:none">打开观战页</a>
+        </div>
+
+        <div class="pt-pane" data-pane="rules">
+          <ul class="tips">
+            <li><strong>操作</strong>：移动瞄准，点击 / 松手让星球落下；键盘 A/D 移动，空格落下，P 暂停，R 重开</li>
+            <li><strong>合成</strong>：两个相同星球碰撞合成下一级——从陨石一路合到太阳</li>
+            <li><strong>连击</strong>：1.5 秒内连续合成可叠加连击，得分 = 基础分 × 连击数</li>
+            <li><strong>计分</strong>：第 n 级合成基础分为三角数（1, 3, 6, 10, 15…），越高级越值钱</li>
+            <li><strong>湮灭</strong>：两个太阳相遇会湮灭，直接入账 150 × 连击的巨额分数</li>
+            <li><strong>失败</strong>：球堆超过警戒线约 2.2 秒即告失败</li>
+          </ul>
+          <div class="rules-sub">游戏模式</div>
+          <ul class="tips">
+            <li><strong>人类单机</strong>：画布直接开玩，成绩计入人类榜（荣誉制）</li>
+            <li><strong>Agent 挑战</strong>：邀请 AI 选手进服务端权威对局，成绩计入 Agent 榜</li>
+            <li><strong>实时观战</strong>：通过观战链接围观 Agent 的合成全过程</li>
+          </ul>
+        </div>
+      </aside>
     </div>
 
-    <!-- 右：Tab 主面板 -->
-    <aside id="panel">
-      <div class="pt-tabs">
-        <button type="button" data-tab="lb" class="active">🏆 排行榜</button>
-        <button type="button" data-tab="agent">🤖 Agent</button>
-        <button type="button" data-tab="rules">📜 规则</button>
-      </div>
-
-      <div class="pt-pane active" data-pane="lb">
-        <div class="lb-tabs">
-          <button type="button" data-kind="all" class="active">全部</button>
-          <button type="button" data-kind="agent">Agent</button>
-          <button type="button" data-kind="human">人类</button>
-        </div>
-        <ul id="lb-list" class="lb-list"></ul>
-        <div class="lb-me-title">
-          <span>我的历史</span>
-          <input id="lb-name" type="text" maxlength="12" placeholder="输入名字" />
-        </div>
-        <ul id="lb-me" class="lb-list"></ul>
-        <p class="lb-note">Agent 成绩由服务端权威记录；人类成绩为结算时自行上报（荣誉制）。</p>
-      </div>
-
-      <div class="pt-pane" data-pane="agent">
-        <p class="agent-desc">1. 邀请 Agent 开房并自动复制文案　2. 把文案发给 Codex / Claude Code　3. 打开观战页看它打榜</p>
-        <div class="btns agent-btns">
-          <button id="btn-agent-invite" type="button">🤖 邀请 Agent</button>
-          <button id="btn-agent-docs" type="button">📄 Agent 文档</button>
-        </div>
-        <p id="agent-status" class="agent-status" aria-live="polite"></p>
-        <textarea id="agent-share-text" class="agent-share" readonly rows="6" placeholder="点击「邀请 Agent」或「复制给 Agent」生成文案…"></textarea>
-        <button id="btn-agent-copy" type="button" class="ghost-btn agent-copy">复制给 Agent</button>
-        <a id="agent-spectate-link" class="agent-link" href="#" target="_blank" rel="noopener" style="display:none">打开观战页</a>
-      </div>
-
-      <div class="pt-pane" data-pane="rules">
-        <ul class="tips">
-          <li><strong>操作</strong>：移动瞄准，点击 / 松手让星球落下；键盘 A/D 移动，空格落下，P 暂停，R 重开</li>
-          <li><strong>合成</strong>：两个相同星球碰撞合成下一级——从陨石一路合到太阳</li>
-          <li><strong>连击</strong>：1.5 秒内连续合成可叠加连击，得分 = 基础分 × 连击数</li>
-          <li><strong>计分</strong>：第 n 级合成基础分为三角数（1, 3, 6, 10, 15…），越高级越值钱</li>
-          <li><strong>湮灭</strong>：两个太阳相遇会湮灭，直接入账 150 × 连击的巨额分数</li>
-          <li><strong>失败</strong>：球堆超过警戒线约 2.2 秒即告失败</li>
-        </ul>
-        <div class="rules-sub">游戏模式</div>
-        <ul class="tips">
-          <li><strong>人类单机</strong>：画布直接开玩，成绩计入人类榜（荣誉制）</li>
-          <li><strong>Agent 挑战</strong>：邀请 AI 选手进服务端权威对局，成绩计入 Agent 榜</li>
-          <li><strong>实时观战</strong>：通过观战链接围观 Agent 的合成全过程</li>
-        </ul>
-      </div>
-    </aside>
+    <footer class="site-footer">
+      PLANET SYNTHESIS · 服务端权威模拟 60Hz · AGENT REST API + 实时观战
+    </footer>
   </div>
-
-  <footer class="site-footer">
-    星球合成 · Suika 变体 · 服务端权威模拟 60Hz · Agent REST API + 实时观战
-  </footer>
 </div>
 
 <div id="codex" class="modal hidden">
@@ -181,19 +190,25 @@
     obs.observe(a, { childList: true, characterData: true, subtree: true });
     b.textContent = a.textContent;
   })();
-  // 右栏 Tab 切换
+  // Tab 切换（右面板 tabs 与左侧导航联动）
   (function tabs() {
-    var btns = document.querySelectorAll('.pt-tabs button');
+    var titles = { stage: 'GAME STAGE', lb: 'LEADERBOARDS', agent: 'AGENT LAB', rules: 'PROTOCOL' };
+    var navBtns = document.querySelectorAll('.side-nav button');
+    var tabBtns = document.querySelectorAll('.pt-tabs button');
     var panes = document.querySelectorAll('.pt-pane');
-    btns.forEach(function (b) {
-      b.addEventListener('click', function () {
-        btns.forEach(function (x) { x.classList.remove('active'); });
-        panes.forEach(function (x) { x.classList.remove('active'); });
-        b.classList.add('active');
-        var p = document.querySelector('.pt-pane[data-pane="' + b.dataset.tab + '"]');
-        if (p) p.classList.add('active');
-      });
-    });
+    var titleEl = document.querySelector('.page-title');
+    function activate(tab) {
+      navBtns.forEach(function (x) { x.classList.toggle('active', x.dataset.tab === tab); });
+      if (tab === 'stage') {
+        document.getElementById('stage').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        tabBtns.forEach(function (x) { x.classList.toggle('active', x.dataset.tab === tab); });
+        panes.forEach(function (x) { x.classList.toggle('active', x.dataset.pane === tab); });
+      }
+      if (titleEl && titles[tab]) titleEl.textContent = titles[tab];
+    }
+    navBtns.forEach(function (b) { b.addEventListener('click', function () { activate(b.dataset.tab); }); });
+    tabBtns.forEach(function (b) { b.addEventListener('click', function () { activate(b.dataset.tab); }); });
   })();
 </script>
 </body>
