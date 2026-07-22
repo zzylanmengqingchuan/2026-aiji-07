@@ -36,6 +36,10 @@
     return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   }
 
+  function rankLabel(rank) {
+    return rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : String(rank);
+  }
+
   function renderItems(el, items, showRank) {
     if (!items.length) {
       el.innerHTML = '<li class="lb-empty">暂无成绩，来打一局吧</li>';
@@ -43,7 +47,7 @@
     }
     el.innerHTML = items
       .map((r) => {
-        const badge = r.kind === 'agent' ? '<span class="lb-badge agent">A</span>' : '<span class="lb-badge human">人</span>';
+        const badge = r.kind === 'agent' ? '<span class="lb-badge agent">Agent</span>' : '<span class="lb-badge human">人类</span>';
         const extras = [
           r.maxLevelName ? '最高「' + esc(r.maxLevelName) + '」' : '',
           r.sunBorn ? '☀×' + r.sunBorn : '',
@@ -51,7 +55,7 @@
         ].filter(Boolean).join(' · ');
         return (
           '<li>' +
-          (showRank ? '<span class="lb-rank">' + r.rank + '</span>' : '<span class="lb-rank lb-dot">·</span>') +
+          (showRank ? '<span class="lb-rank">' + rankLabel(r.rank) + '</span>' : '<span class="lb-rank lb-dot">·</span>') +
           badge +
           '<span class="lb-name">' + esc(r.name) + '</span>' +
           '<span class="lb-score">' + r.score + '</span>' +

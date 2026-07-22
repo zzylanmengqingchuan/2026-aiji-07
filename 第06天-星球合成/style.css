@@ -1,58 +1,58 @@
-/* 星球合成 · Soft Pop · 左介绍/选项 + 右对战 */
+/* 星球合成 · Soft Pop · 顶部品牌栏 + 游戏主区 + 内容卡片 */
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=Space+Mono:wght@400;700&display=swap');
 
 :root {
-  --background: oklch(0.9789 0.0082 121.6272);
-  --foreground: oklch(0 0 0);
+  --background: oklch(0.975 0.01 110);
+  --foreground: oklch(0.25 0.02 280);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0 0 0);
+  --card-foreground: oklch(0.25 0.02 280);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0 0 0);
-  --primary: oklch(0.5106 0.2301 276.9656);
+  --popover-foreground: oklch(0.25 0.02 280);
+  --primary: oklch(0.55 0.21 276);
   --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.7038 0.1230 182.5025);
+  --secondary: oklch(0.72 0.13 185);
   --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.9551 0 0);
-  --muted-foreground: oklch(0.3211 0 0);
-  --accent: oklch(0.7686 0.1647 70.0804);
-  --accent-foreground: oklch(0 0 0);
-  --destructive: oklch(0.6368 0.2078 25.3313);
+  --muted: oklch(0.955 0.005 280);
+  --muted-foreground: oklch(0.5 0.02 280);
+  --accent: oklch(0.78 0.16 75);
+  --accent-foreground: oklch(0.3 0.05 75);
+  --destructive: oklch(0.62 0.2 25);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0 0 0);
-  --ring: oklch(0.7853 0.1041 274.7134);
+  --border: oklch(0.9 0.015 280);
+  --ring: oklch(0.79 0.1 275);
   --radius: 1rem;
   --font-sans: "DM Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
   --font-mono: "Space Mono", ui-monospace, monospace;
   --tracking-normal: normal;
-  --shadow-sm: 0 1px 2px -1px hsl(0 0% 10% / 0.08);
-  --shadow-md: 0 4px 12px -2px hsl(0 0% 10% / 0.1);
-  --shadow-lg: 0 10px 28px -6px hsl(0 0% 10% / 0.14);
+  --shadow-sm: 0 1px 3px hsl(260 20% 40% / 0.06);
+  --shadow-md: 0 6px 18px -4px hsl(260 25% 45% / 0.12);
+  --shadow-lg: 0 14px 36px -8px hsl(260 30% 45% / 0.18);
   --shadow-pop: 0 4px 0 color-mix(in oklch, var(--primary) 75%, black);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: oklch(0.12 0.015 270);
-    --foreground: oklch(1 0 0);
-    --card: oklch(0.2455 0.0217 257.2823);
-    --card-foreground: oklch(1 0 0);
-    --popover: oklch(0.2455 0.0217 257.2823);
-    --popover-foreground: oklch(1 0 0);
-    --primary: oklch(0.6801 0.1583 276.9349);
-    --primary-foreground: oklch(0 0 0);
-    --secondary: oklch(0.7845 0.1325 181.9120);
-    --secondary-foreground: oklch(0 0 0);
-    --muted: oklch(0.3211 0 0);
-    --muted-foreground: oklch(0.8452 0 0);
-    --accent: oklch(0.8790 0.1534 91.6054);
-    --accent-foreground: oklch(0 0 0);
-    --destructive: oklch(0.7106 0.1661 22.2162);
-    --destructive-foreground: oklch(0 0 0);
-    --border: oklch(0.4459 0 0);
-    --ring: oklch(0.6801 0.1583 276.9349);
-    --shadow-sm: 0 1px 2px -1px hsl(0 0% 0% / 0.35);
-    --shadow-md: 0 4px 16px -2px hsl(0 0% 0% / 0.45);
-    --shadow-lg: 0 12px 32px -6px hsl(0 0% 0% / 0.55);
+    --background: oklch(0.16 0.02 275);
+    --foreground: oklch(0.95 0.01 280);
+    --card: oklch(0.22 0.025 275);
+    --card-foreground: oklch(0.95 0.01 280);
+    --popover: oklch(0.24 0.025 275);
+    --popover-foreground: oklch(0.95 0.01 280);
+    --primary: oklch(0.7 0.16 276);
+    --primary-foreground: oklch(0.18 0.03 276);
+    --secondary: oklch(0.75 0.12 185);
+    --secondary-foreground: oklch(0.18 0.03 185);
+    --muted: oklch(0.3 0.02 275);
+    --muted-foreground: oklch(0.75 0.02 280);
+    --accent: oklch(0.82 0.14 90);
+    --accent-foreground: oklch(0.25 0.04 90);
+    --destructive: oklch(0.7 0.17 22);
+    --destructive-foreground: oklch(0.98 0 0);
+    --border: oklch(0.32 0.02 275);
+    --ring: oklch(0.7 0.16 276);
+    --shadow-sm: 0 1px 3px hsl(0 0% 0% / 0.35);
+    --shadow-md: 0 6px 18px -4px hsl(0 0% 0% / 0.45);
+    --shadow-lg: 0 14px 36px -8px hsl(0 0% 0% / 0.55);
     --shadow-pop: 0 4px 0 color-mix(in oklch, var(--primary) 55%, black);
   }
 }
@@ -70,115 +70,133 @@ body {
   font-family: var(--font-sans);
   letter-spacing: var(--tracking-normal);
   background:
-    radial-gradient(900px 560px at 12% -8%, color-mix(in oklch, var(--primary) 22%, transparent), transparent 60%),
-    radial-gradient(720px 480px at 92% 8%, color-mix(in oklch, var(--secondary) 18%, transparent), transparent 55%),
-    radial-gradient(640px 420px at 50% 100%, color-mix(in oklch, var(--accent) 14%, transparent), transparent 50%),
+    radial-gradient(900px 560px at 12% -8%, color-mix(in oklch, var(--primary) 20%, transparent), transparent 60%),
+    radial-gradient(720px 480px at 92% 8%, color-mix(in oklch, var(--secondary) 16%, transparent), transparent 55%),
+    radial-gradient(640px 420px at 50% 100%, color-mix(in oklch, var(--accent) 12%, transparent), transparent 50%),
     var(--background);
   color: var(--foreground);
-  min-height: 100%;
   min-height: 100dvh;
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
   user-select: none;
   -webkit-user-select: none;
 }
 
 #app {
   width: 100%;
-  max-width: 980px;
-  padding: 12px 16px;
-  max-height: 100dvh;
+  max-width: 1120px;
+  padding: 16px 20px 8px;
 }
 
-/* 左介绍/选项 · 右对战 */
+/* ===== 顶部品牌栏 ===== */
+.site-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 22px;
+  margin-bottom: 16px;
+  border-radius: calc(var(--radius) + 4px);
+  background:
+    linear-gradient(115deg,
+      color-mix(in oklch, var(--primary) 16%, var(--card)),
+      color-mix(in oklch, var(--secondary) 10%, var(--card)) 55%,
+      color-mix(in oklch, var(--accent) 12%, var(--card)));
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  flex-wrap: wrap;
+}
+.site-header .logo {
+  font-size: 40px;
+  line-height: 1;
+  filter: drop-shadow(0 3px 6px hsl(260 40% 50% / 0.35));
+}
+.site-header .title-block h1 {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  background: linear-gradient(120deg, var(--primary) 0%, oklch(0.66 0.2 354) 45%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.site-header .tagline {
+  font-size: 13px;
+  color: var(--muted-foreground);
+  margin-top: 3px;
+  font-weight: 500;
+}
+.mode-chips {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chip {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ===== 游戏主区：左对战 · 右 HUD ===== */
 #main {
   display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(280px, 420px);
+  grid-template-columns: minmax(300px, 460px) minmax(240px, 300px);
   gap: 16px;
-  align-items: stretch;
   justify-content: center;
+  align-items: start;
   width: 100%;
 }
 
-/* ===== 左侧栏 ===== */
+#stage {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 82dvh;
+  aspect-ratio: 480 / 720;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg), 0 0 0 5px color-mix(in oklch, var(--primary) 10%, transparent);
+  touch-action: none;
+  cursor: crosshair;
+  background: #0a0d20;
+  object-fit: contain;
+}
+
 #panel {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  max-height: min(92dvh, 720px);
-  overflow-y: auto;
-  order: 1;
 }
 
-.card-block {
-  background: var(--card);
-  color: var(--card-foreground);
-  border: 2px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px 14px 12px;
-  box-shadow: var(--shadow-sm);
-}
-
-.panel-intro h1 {
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  background: linear-gradient(120deg, var(--primary) 0%, oklch(0.6559 0.2118 354.3084) 45%, var(--accent) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 1px 0 color-mix(in oklch, var(--primary) 20%, transparent));
-}
-
-.panel-intro .sub {
-  font-size: 12px;
-  color: var(--muted-foreground);
-  margin: 8px 0 10px;
-  font-weight: 500;
-  line-height: 1.45;
-}
-
-.tips {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.tips li {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--muted-foreground);
-  padding-left: 14px;
-  position: relative;
-}
-.tips li::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0.45em;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--secondary);
-  border: 1px solid var(--border);
-}
-
-.panel-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
+/* ===== 卡片通用 ===== */
+.card-block,
 .card {
   background: var(--card);
   color: var(--card-foreground);
-  border: 2px solid var(--border);
-  border-radius: calc(var(--radius) - 2px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.card-block { padding: 14px 16px 12px; }
+
+.card {
   padding: 10px 8px;
   text-align: center;
-  box-shadow: var(--shadow-sm);
 }
 
 .card .label,
@@ -193,11 +211,17 @@ body {
 
 .card .num {
   font-family: var(--font-mono);
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   color: var(--primary);
   margin-top: 4px;
   line-height: 1.1;
+}
+
+.panel-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .next-card {
@@ -205,7 +229,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  background: linear-gradient(180deg, color-mix(in oklch, var(--secondary) 12%, var(--card)), var(--card));
+  background: linear-gradient(180deg, color-mix(in oklch, var(--secondary) 10%, var(--card)), var(--card));
 }
 .next-card canvas {
   width: 72px;
@@ -217,8 +241,22 @@ body {
 .section-title {
   margin-bottom: 10px;
   text-align: left;
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: var(--foreground);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.section-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--border), transparent);
 }
 
+/* ===== 按钮 ===== */
 .btns {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -232,7 +270,7 @@ body {
   font-weight: 650;
   color: var(--secondary-foreground);
   background: var(--secondary);
-  border: 2px solid var(--border);
+  border: none;
   border-radius: calc(var(--radius) - 4px);
   cursor: pointer;
   box-shadow: 0 3px 0 color-mix(in oklch, var(--secondary) 55%, black);
@@ -265,11 +303,48 @@ body {
   text-align: center;
 }
 
-/* Agent 入口 */
+/* ===== 下方内容区 ===== */
+.content-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+  align-items: start;
+}
+
+/* 玩法规则 */
+.tips {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tips li {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted-foreground);
+  padding-left: 16px;
+  position: relative;
+}
+.tips li strong {
+  color: var(--foreground);
+}
+.tips li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.5em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+}
+
+/* Agent 挑战 */
 .panel-agent .agent-desc {
   font-size: 12px;
   color: var(--muted-foreground);
-  line-height: 1.45;
+  line-height: 1.5;
   margin-bottom: 10px;
 }
 .agent-btns {
@@ -302,8 +377,8 @@ body {
   font-size: 11px;
   line-height: 1.4;
   color: var(--foreground);
-  background: #fff;
-  border: 2px solid var(--border);
+  background: color-mix(in oklch, var(--muted) 45%, var(--card));
+  border: 1px solid var(--border);
   border-radius: calc(var(--radius) - 4px);
   resize: vertical;
   min-height: 140px;
@@ -314,12 +389,6 @@ body {
   cursor: text;
   white-space: pre-wrap;
   word-break: break-word;
-}
-@media (prefers-color-scheme: dark) {
-  .agent-share {
-    background: oklch(0.2 0.02 257);
-    color: #fff;
-  }
 }
 .agent-copy {
   margin-top: 8px;
@@ -337,15 +406,7 @@ body {
   -webkit-user-select: text;
 }
 
-.agent-watch-block .agent-room,
-.agent-watch-block .agent-phase,
-.agent-watch-block .agent-player {
-  font-size: 12px;
-  margin: 4px 0;
-  color: var(--muted-foreground);
-}
-
-/* ---- 排行榜 ---- */
+/* 排行榜 */
 .panel-lb {
   user-select: text;
   -webkit-user-select: text;
@@ -354,36 +415,40 @@ body {
   display: flex;
   gap: 6px;
   margin-bottom: 8px;
+  background: color-mix(in oklch, var(--muted) 60%, transparent);
+  padding: 4px;
+  border-radius: calc(var(--radius) - 4px);
 }
 .lb-tabs button {
   flex: 1;
-  padding: 5px 0;
+  padding: 6px 0;
   font-size: 12px;
-  font-weight: 600;
-  border: 1px solid var(--border);
-  border-radius: calc(var(--radius) - 4px);
-  background: var(--card);
+  font-weight: 700;
+  border: none;
+  border-radius: calc(var(--radius) - 6px);
+  background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .lb-tabs button.active {
-  background: var(--primary);
-  color: var(--primary-foreground);
-  border-color: var(--primary);
+  background: var(--card);
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
 }
 .lb-list {
   list-style: none;
   margin: 0 0 10px;
   padding: 0;
-  max-height: 260px;
+  max-height: 280px;
   overflow-y: auto;
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .lb-list li {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 4px 2px;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 4px;
   border-bottom: 1px dashed var(--border);
   flex-wrap: wrap;
 }
@@ -391,9 +456,13 @@ body {
   color: var(--muted-foreground);
   border-bottom: none;
 }
+.lb-list li:first-child {
+  background: linear-gradient(90deg, color-mix(in oklch, var(--accent) 14%, transparent), transparent);
+  border-radius: 6px;
+}
 .lb-rank {
-  min-width: 18px;
-  text-align: right;
+  min-width: 22px;
+  text-align: center;
   font-weight: 700;
   color: var(--primary);
 }
@@ -403,21 +472,26 @@ body {
 .lb-badge {
   font-size: 10px;
   font-weight: 700;
-  padding: 0 4px;
-  border-radius: 4px;
-  line-height: 1.5;
+  padding: 0 5px;
+  border-radius: 999px;
+  line-height: 1.6;
 }
 .lb-badge.agent {
-  background: var(--primary);
-  color: var(--primary-foreground);
+  background: color-mix(in oklch, var(--primary) 16%, transparent);
+  color: var(--primary);
 }
 .lb-badge.human {
-  background: var(--muted, #888);
-  color: #fff;
+  background: color-mix(in oklch, var(--secondary) 20%, transparent);
+  color: color-mix(in oklch, var(--secondary) 60%, black);
+}
+@media (prefers-color-scheme: dark) {
+  .lb-badge.human {
+    color: var(--secondary);
+  }
 }
 .lb-name {
   font-weight: 600;
-  max-width: 90px;
+  max-width: 92px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -425,12 +499,14 @@ body {
 .lb-score {
   margin-left: auto;
   font-weight: 800;
+  font-family: var(--font-mono);
   color: var(--primary);
 }
 .lb-meta {
   width: 100%;
   font-size: 11px;
   color: var(--muted-foreground);
+  padding-left: 29px;
 }
 .lb-me-title {
   display: flex;
@@ -438,21 +514,38 @@ body {
   gap: 8px;
   margin-top: 4px;
 }
+.lb-me-title::after {
+  display: none;
+}
 #lb-name {
   flex: 1;
   min-width: 0;
-  padding: 4px 8px;
+  padding: 5px 10px;
   font-size: 12px;
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) - 4px);
+  border-radius: 999px;
   background: var(--card);
   color: var(--foreground);
+  outline: none;
+}
+#lb-name:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 15%, transparent);
 }
 .lb-note {
   font-size: 11px;
   color: var(--muted-foreground);
   line-height: 1.4;
   margin: 4px 0 0;
+}
+
+/* Agent 观战块（spectate 动态插入） */
+.agent-watch-block .agent-room,
+.agent-watch-block .agent-phase,
+.agent-watch-block .agent-player {
+  font-size: 12px;
+  margin: 4px 0;
+  color: var(--muted-foreground);
 }
 .agent-watch-block .agent-phase {
   font-weight: 700;
@@ -469,33 +562,8 @@ body {
 }
 .event-log li {
   padding: 4px 0;
-  border-bottom: 1px solid color-mix(in oklch, var(--border) 35%, transparent);
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
   color: var(--muted-foreground);
-}
-
-/* ===== 右侧对战区 ===== */
-#stage {
-  position: relative;
-  width: 100%;
-  min-width: 0;
-  order: 2;
-  display: flex;
-  align-items: stretch;
-}
-
-#game {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: min(92dvh, 720px);
-  aspect-ratio: 480 / 720;
-  border-radius: var(--radius);
-  border: 2px solid var(--border);
-  box-shadow: var(--shadow-lg), 0 0 0 4px color-mix(in oklch, var(--primary) 12%, transparent);
-  touch-action: none;
-  cursor: crosshair;
-  background: #0a0d20;
-  object-fit: contain;
 }
 
 /* Overlays */
@@ -512,11 +580,11 @@ body {
 }
 .panel-box {
   text-align: center;
-  padding: 24px 26px;
+  padding: 26px 30px;
   background: var(--popover);
   color: var(--popover-foreground);
-  border: 2px solid var(--border);
-  border-radius: calc(var(--radius) + 2px);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
   box-shadow: var(--shadow-lg);
   max-width: 86%;
 }
@@ -571,8 +639,8 @@ body {
   font-size: 16px;
   font-weight: 700;
   color: var(--primary-foreground);
-  background: var(--primary);
-  border: 2px solid var(--border);
+  background: linear-gradient(135deg, var(--primary), color-mix(in oklch, var(--primary) 75%, var(--secondary)));
+  border: none;
   border-radius: calc(var(--radius) - 2px);
   cursor: pointer;
   box-shadow: var(--shadow-pop);
@@ -593,14 +661,14 @@ body {
   font-weight: 600;
   color: var(--foreground);
   background: transparent;
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
   border-radius: calc(var(--radius) - 2px);
   cursor: pointer;
 }
 .ghost-btn:hover { background: color-mix(in oklch, var(--muted) 80%, transparent); }
 .ghost-btn:active { background: var(--muted); }
 
-/* Codex */
+/* Codex 图鉴 */
 .modal {
   position: fixed;
   inset: 0;
@@ -615,8 +683,8 @@ body {
 .modal-box {
   background: var(--popover);
   color: var(--popover-foreground);
-  border: 2px solid var(--border);
-  border-radius: calc(var(--radius) + 2px);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
   padding: 22px;
   max-width: 560px;
   width: 100%;
@@ -636,7 +704,7 @@ body {
 }
 .codex-cell {
   background: var(--card);
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
   border-radius: calc(var(--radius) - 4px);
   padding: 10px 4px 8px;
   box-shadow: var(--shadow-sm);
@@ -661,28 +729,39 @@ body {
   line-height: 1.65;
 }
 
+/* 页脚 */
+.site-footer {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  padding: 18px 0 14px;
+}
+
 .hidden { display: none !important; }
 
-/* 窄屏：上对战、下介绍（仍尽量一屏） */
-@media (max-width: 760px) {
-  body { align-items: flex-start; }
-  #app {
-    max-height: none;
-    padding: 10px 12px 16px;
-  }
+/* 窄屏：单列，游戏优先 */
+@media (max-width: 860px) {
+  #app { padding: 10px 12px 8px; }
+  .site-header { padding: 12px 16px; gap: 10px; }
+  .site-header .logo { font-size: 30px; }
+  .site-header .title-block h1 { font-size: 20px; }
+  .site-header .tagline { font-size: 12px; }
+  .mode-chips { margin-left: 0; }
   #main {
     grid-template-columns: 1fr;
     gap: 12px;
-  }
-  #stage { order: 1; }
-  #panel {
-    order: 2;
-    max-height: none;
   }
   #game {
     max-height: min(62dvh, 560px);
     margin: 0 auto;
   }
-  .panel-intro h1 { font-size: 20px; }
-  .tips li:nth-child(n+3) { display: none; }
+  #panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+  .panel-stats { grid-column: 1 / -1; }
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
 }
