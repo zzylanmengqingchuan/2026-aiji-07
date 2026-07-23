@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>高速公路收费站调度模拟器</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: #1a1a2e;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#c { display: block; margin: 0 auto; }
+#ui {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(26, 26, 46, 0.95);
+  z-index: 10;
+  transition: opacity 0.3s;
+}
+#ui.hidden { display: none; }
+#ui h1 { font-size: 2em; color: #eee; margin-bottom: 10px; }
+#ui p { font-size: 1em; color: #aaa; margin-bottom: 6px; text-align: center; max-width: 320px; line-height: 1.5; }
+#ui .highlight { color: #5dade2; font-weight: 600; }
+#ui .warn { color: #e74c3c; font-size: 0.85em; }
+.btn {
+  margin-top: 18px; padding: 12px 40px;
+  font-size: 1.1em; font-weight: 600;
+  color: #fff; background: #2980b9;
+  border: none; border-radius: 8px; cursor: pointer;
+}
+.btn:active { transform: scale(0.95); }
+#stats { margin: 14px 0; font-size: 1.3em; color: #ddd; text-align: center; line-height: 1.8; }
+#stats span { color: #5dade2; font-weight: 700; }
+#record { font-size: 0.85em; color: #888; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <h1>🚗 收费站调度员</h1>
+  <p>车辆从公路两端驶来，你要给每辆车<span class="highlight">画出路线</span>引导到对面的出口</p>
+  <p>路线完全自由 — 画弧线绕开其他车！</p>
+  <p class="warn">⚠️ 两车相撞 = Game Over</p>
+  <button class="btn" id="playBtn">开始</button>
+</div>
+<script>
+(function(){
+'use strict';
+
+const $ = id => document.getElementById(id);
+const canvas = $('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+// ===== State =====
+let state = 'menu'; // menu, play, over
+let time = 0; // ms elapsed
+let score = 0; // vehicles that reached exit
+let best = +localStorage.getItem('tollBest') || 0;
+let vehicles = [];
+let explosions = [];
+let flash = 0;
+let spawnAcc = 0;
+let selected = null; // vehicle being drawn
+let drawing = false;
+let drawPath = [];
+let lastFrame = 0;
+
+// ===== Layout =====
+// The toll plaza is a large open area. Vehicles enter from edges and must reach
+// a target exit on the opposite side, passing through one of the toll gates in the middle.
+// Entry/exit points are along top and bottom edges (3 each side = 6 total entry points).
+// Toll gates are in the center row.
+
+let gates = []; // {x, y}
+let entryPoints = []; // {x, y, angle} - where cars spawn heading inward
+let exitPoints = [];  // {x, y} - targets
+
+const GATE_COUNT = 5;
+const ENTRY_TOP = 3;
+const ENTRY_BOT = 3;
+
+function setupLayout() {
+  gates = [];
+  entryPoints = [];
+  exitPoints = [];
+
+  const mx = W * 0.12;
+  const gateSpacing = (W - 2 * mx) / (GATE_COUNT - 1);
+  for (let i = 0; i < GATE_COUNT; i++) {
+    gates.push({ x: mx + i * gateSpacing, y: H * 0.5 });
+  }
+
+  // Top entries (cars go down)
+  const topMargin = W * 0.2;
+  const topSpacing = (W - 2 * topMargin) / (ENTRY_TOP - 1);
+  for (let i = 0; i < ENTRY_TOP; i++) {
+    const x = topMargin + i * topSpacing;
+    entryPoints.push({ x, y: -20, dir: 'down' });
+    exitPoints.push({ x, y: H + 20, dir: 'down' }); // exit at bottom
+  }
+  // Bottom entries (cars go up)
+  const botMargin = W * 0.2;
+  const botSpacing = (W - 2 * botMargin) / (ENTRY_BOT - 1);
+  for (let i = 0; i < ENTRY_BOT; i++) {
+    const x = botMargin + i * botSpacing;
+    entryPoints.push({ x, y: H + 20, dir: 'up' });
+    exitPoints.push({ x, y: -20, dir: 'up' }); // exit at top
+  }
+}
+
+// ===== Difficulty =====
+function getDiff(t) {
+  const s = t / 1000;
+  if (s < 20) return { interval: 4000, speed: 1.0, maxCars: 4 };
+  if (s < 45) return { interval: 3200, speed: 1.1, maxCars: 5 };
+  if (s < 75) return { interval: 2600, speed: 1.2, maxCars: 7 };
+  if (s < 120) return { interval: 2000, speed: 1.35, maxCars: 9 };
+  if (s < 180) return { interval: 1600, speed: 1.5, maxCars: 11 };
+  return { interval: 1200, speed: 1.7, maxCars: 13 };
+}
+
+// ===== Vehicle =====
+function spawnVehicle() {
+  const diff = getDiff(time);
+  if (vehicles.filter(v => !v.done).length >= diff.maxCars) return;
+
+  // Pick a random entry point
+  const idx = Math.floor(Math.random() * entryPoints.length);
+  const entry = entryPoints[idx];
+
+  // Target: an exit on the OPPOSITE side
+  // If entry is from top (dir=down), exit should be on bottom, and vice versa
+  let exitCandidates;
+  if (entry.dir === 'down') {
+    exitCandidates = exitPoints.filter(e => e.dir === 'down'); // bottom exits
+  } else {
+    exitCandidates = exitPoints.filter(e => e.dir === 'up'); // top exits
+  }
+  const exit = exitCandidates[Math.floor(Math.random() * exitCandidates.length)];
+
+  // Pick a gate to pass through
+  const gate = gates[Math.floor(Math.random() * gates.length)];
+
+  const colors = ['#3498db', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c', '#e74c3c'];
+  const color = colors[Math.floor(Math.random() * colors.length)];
+
+  const v = {
+    x: entry.x, y: entry.y,
+    w: 16, h: 28,
+    color,
+    speed: (1.2 + Math.random() * 0.4) * diff.speed,
+    angle: entry.dir === 'down' ? Math.PI / 2 : -Math.PI / 2,
+    entry, exit, gate,
+    path: null,       // player-drawn path (array of {x,y})
+    pathIdx: 0,       // current progress along path
+    autoPath: null,   // auto-generated straight path if player doesn't draw
+    done: false,
+    atGate: false,
+    gateProgress: 0,
+    gateTime: 1500 + Math.random() * 1500,
+    spawnTime: time,
+    hasPlayerPath: false
+  };
+
+  // Generate a default straight-line path (entry → gate → exit)
+  v.autoPath = generateAutoPath(v);
+  v.path = v.autoPath;
+
+  vehicles.push(v);
+}
+
+function generateAutoPath(v) {
+  // Simple 3-point path: entry → gate → exit
+  const pts = [
+    { x: v.entry.x, y: v.entry.y },
+    { x: v.gate.x, y: v.gate.y },
+    { x: v.exit.x, y: v.exit.y }
+  ];
+  return subdividePath(pts, 6);
+}
+
+function subdividePath(pts, segLen) {
+  if (pts.length < 2) return pts;
+  const result = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const d = Math.hypot(b.x - a.x, b.y - a.y);
+    const steps = Math.max(2, Math.ceil(d / segLen));
+    for (let s = 0; s < steps; s++) {
+      const t = s / steps;
+      result.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    }
+  }
+  result.push(pts[pts.length - 1]);
+  return result;
+}
+
+// ===== Update =====
+function update(dt) {
+  if (state !== 'play') return;
+  time += dt;
+
+  // Spawn
+  const diff = getDiff(time);
+  spawnAcc += dt;
+  if (spawnAcc >= diff.interval) {
+    spawnAcc = 0;
+    spawnVehicle();
+  }
+
+  // Update vehicles
+  for (const v of vehicles) {
+    if (v.done) continue;
+
+    // At gate: processing
+    if (v.atGate) {
+      v.gateProgress += dt;
+      if (v.gateProgress >= v.gateTime) {
+        v.atGate = false;
+        // Continue along remaining path after gate
+      }
+      continue;
+    }
+
+    // Move along path
+    if (v.path && v.pathIdx < v.path.length - 1) {
+      const speed = v.speed * 60 * (dt / 1000);
+      let remaining = speed;
+
+      while (remaining > 0 && v.pathIdx < v.path.length - 1) {
+        const cur = v.path[v.pathIdx];
+        const nxt = v.path[v.pathIdx + 1];
+        const dx = nxt.x - v.x, dy = nxt.y - v.y;
+        const d = Math.hypot(dx, dy);
+
+        if (d <= remaining) {
+          v.x = nxt.x; v.y = nxt.y;
+          remaining -= d;
+          v.pathIdx++;
+
+          // Check if reached gate area
+          if (!v.atGate) {
+            for (const g of gates) {
+              if (Math.abs(v.x - g.x) < 20 && Math.abs(v.y - g.y) < 20) {
+                v.atGate = true;
+                v.gateProgress = 0;
+                v.x = g.x; v.y = g.y;
+                break;
+              }
+            }
+          }
+          if (v.atGate) break;
+        } else {
+          const r = remaining / d;
+          v.x += dx * r; v.y += dy * r;
+          remaining = 0;
+        }
+      }
+
+      // Update angle
+      if (v.pathIdx < v.path.length - 1) {
+        const nxt = v.path[v.pathIdx + 1];
+        v.angle = Math.atan2(nxt.y - v.y, nxt.x - v.x);
+      }
+    }
+
+    // Check if exited
+    if (v.y < -40 || v.y > H + 40 || v.x < -40 || v.x > W + 40) {
+      v.done = true;
+      score++;
+    }
+  }
+
+  // Remove done
+  vehicles = vehicles.filter(v => !v.done);
+
+  // Collision (only between moving, visible vehicles)
+  for (let i = 0; i < vehicles.length; i++) {
+    const a = vehicles[i];
+    if (a.done || a.atGate || a.y < 0 || a.y > H) continue;
+    for (let j = i + 1; j < vehicles.length; j++) {
+      const b = vehicles[j];
+      if (b.done || b.atGate || b.y < 0 || b.y > H) continue;
+      const minD = (Math.max(a.w, a.h) + Math.max(b.w, b.h)) * 0.35;
+      if (Math.hypot(a.x - b.x, a.y - b.y) < minD) {
+        gameOver(a, b);
+        return;
+      }
+    }
+  }
+
+  // Explosions
+  for (const e of explosions) { e.x += e.vx; e.y += e.vy; e.life -= 0.02; }
+  explosions = explosions.filter(e => e.life > 0);
+  if (flash > 0) flash -= dt * 0.003;
+}
+
+function gameOver(a, b) {
+  state = 'over';
+  flash = 1;
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  for (let i = 0; i < 16; i++) {
+    const ang = (Math.PI * 2 / 16) * i + (Math.random() - 0.5) * 0.4;
+    explosions.push({ x: mx, y: my, vx: Math.cos(ang) * (1.5 + Math.random() * 3), vy: Math.sin(ang) * (1.5 + Math.random() * 3), life: 1, size: 4 + Math.random() * 7, color: ['#ff4444','#ff8800','#ffcc00','#fff'][Math.floor(Math.random()*4)] });
+  }
+  if (score > best) { best = score; localStorage.setItem('tollBest', best); }
+  setTimeout(showOver, 700);
+}
+
+function showOver() {
+  const ui = $('ui');
+  ui.innerHTML = `
+    <h1>💥 碰撞！</h1>
+    <div id="stats">通过：<span>${score}</span> 辆<br>时长：<span>${fmt(time/1000)}</span></div>
+    <div id="record">最高纪录：${best} 辆</div>
+    <button class="btn" id="retryBtn">再来一局</button>
+  `;
+  ui.classList.remove('hidden');
+  $('retryBtn').onclick = startGame;
+}
+
+function fmt(s) { return `${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`; }
+
+// ===== Input =====
+function pos(e) {
+  const r = canvas.getBoundingClientRect();
+  const cx = e.touches ? e.touches[0].clientX : e.clientX;
+  const cy = e.touches ? e.touches[0].clientY : e.clientY;
+  return { x: (cx - r.left) * (W / r.width), y: (cy - r.top) * (H / r.height) };
+}
+
+function onDown(e) {
+  e.preventDefault();
+  if (state !== 'play') return;
+  const p = pos(e);
+
+  // Find nearest vehicle within tap radius
+  let best = null, bestD = 40;
+  for (const v of vehicles) {
+    if (v.done) continue;
+    const d = Math.hypot(p.x - v.x, p.y - v.y);
+    if (d < bestD) { bestD = d; best = v; }
+  }
+
+  if (best) {
+    selected = best;
+    selected.highlighted = true;
+    drawing = true;
+    drawPath = [{ x: best.x, y: best.y }];
+  }
+}
+
+function onMove(e) {
+  if (!drawing || !selected) return;
+  e.preventDefault();
+  const p = pos(e);
+  const last = drawPath[drawPath.length - 1];
+  if (Math.hypot(p.x - last.x, p.y - last.y) > 4) {
+    drawPath.push(p);
+  }
+}
+
+function onUp(e) {
+  if (!drawing || !selected) return;
+  e.preventDefault();
+
+  if (drawPath.length >= 3) {
+    // Smooth and assign path
+    let p = smooth(smooth(drawPath));
+    p = subdividePath(p, 5);
+
+    // The path replaces everything from current position onward
+    selected.path = p;
+    selected.pathIdx = 0;
+    selected.x = p[0].x;
+    selected.y = p[0].y;
+    selected.hasPlayerPath = true;
+  }
+
+  if (selected) selected.highlighted = false;
+  selected = null;
+  drawing = false;
+  drawPath = [];
+}
+
+function smooth(pts) {
+  if (pts.length < 3) return pts;
+  const r = [pts[0]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    r.push({
+      x: pts[i-1].x * 0.2 + pts[i].x * 0.6 + pts[i+1].x * 0.2,
+      y: pts[i-1].y * 0.2 + pts[i].y * 0.6 + pts[i+1].y * 0.2
+    });
+  }
+  r.push(pts[pts.length - 1]);
+  return r;
+}
+
+// ===== Render =====
+function render() {
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = '#2c3e50';
+  ctx.fillRect(0, 0, W, H);
+
+  // Road surface (lighter plaza area)
+  ctx.fillStyle = '#34495e';
+  const roadL = W * 0.05, roadR = W * 0.95;
+  ctx.fillRect(roadL, 0, roadR - roadL, H);
+
+  // Gate area highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  ctx.fillRect(roadL, H * 0.44, roadR - roadL, H * 0.12);
+
+  // Lane markings (dashed, top and bottom approach)
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([8, 12]);
+  for (let i = 0; i < ENTRY_TOP; i++) {
+    const ep = entryPoints[i];
+    ctx.beginPath(); ctx.moveTo(ep.x, 0); ctx.lineTo(ep.x, H * 0.35); ctx.stroke();
+  }
+  for (let i = ENTRY_TOP; i < entryPoints.length; i++) {
+    const ep = entryPoints[i];
+    ctx.beginPath(); ctx.moveTo(ep.x, H); ctx.lineTo(ep.x, H * 0.65); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Gates
+  for (const g of gates) {
+    ctx.fillStyle = '#5d6d7e';
+    ctx.beginPath();
+    ctx.roundRect(g.x - 14, g.y - 18, 28, 36, 4);
+    ctx.fill();
+
+    // Gate status light
+    const occupied = vehicles.some(v => v.atGate && Math.abs(v.x - g.x) < 5 && Math.abs(v.y - g.y) < 5);
+    ctx.fillStyle = occupied ? '#e67e22' : '#2ecc71';
+    ctx.beginPath();
+    ctx.arc(g.x, g.y - 22, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // "收费口" label
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.font = `bold ${Math.min(11, W * 0.025)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('收 费 口', W / 2, H * 0.5 + 28);
+
+  // Entry/exit indicators
+  ctx.font = `${Math.min(10, W * 0.022)}px sans-serif`;
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  for (let i = 0; i < ENTRY_TOP; i++) {
+    ctx.fillText('▼', entryPoints[i].x, 15);
+  }
+  for (let i = ENTRY_TOP; i < entryPoints.length; i++) {
+    ctx.fillText('▲', entryPoints[i].x, H - 8);
+  }
+
+  // Vehicles
+  for (const v of vehicles) {
+    if (v.done) continue;
+
+    // Draw path (remaining)
+    if (v.path && v.pathIdx < v.path.length - 1 && v.y > -10 && v.y < H + 10) {
+      const rem = v.path.slice(v.pathIdx);
+      ctx.strokeStyle = v.hasPlayerPath ? `${v.color}66` : 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = v.hasPlayerPath ? 2 : 1;
+      ctx.setLineDash(v.hasPlayerPath ? [4, 3] : [2, 4]);
+      ctx.beginPath();
+      ctx.moveTo(rem[0].x, rem[0].y);
+      for (let i = 1; i < rem.length; i++) ctx.lineTo(rem[i].x, rem[i].y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Vehicle body
+    ctx.save();
+    ctx.translate(v.x, v.y);
+    ctx.rotate(v.angle);
+
+    if (v.highlighted) { ctx.shadowColor = '#f1c40f'; ctx.shadowBlur = 16; }
+
+    ctx.fillStyle = v.color;
+    ctx.beginPath();
+    ctx.roundRect(-v.w / 2, -v.h / 2, v.w, v.h, 4);
+    ctx.fill();
+
+    // Windshield
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillRect(-v.w / 2 + 3, -v.h / 2 + 3, v.w - 6, 8);
+
+    ctx.restore();
+
+    // Gate processing bar
+    if (v.atGate) {
+      const prog = Math.min(1, v.gateProgress / v.gateTime);
+      const bw = 22;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(v.x - bw / 2, v.y - v.h / 2 - 8, bw, 3);
+      ctx.fillStyle = '#2ecc71';
+      ctx.fillRect(v.x - bw / 2, v.y - v.h / 2 - 8, bw * prog, 3);
+    }
+
+    // No-path warning (pulsing ring if car has no player path and is in play area)
+    if (!v.hasPlayerPath && v.y > 10 && v.y < H - 10) {
+      const pulse = Math.sin(time * 0.006) * 0.3 + 0.5;
+      ctx.strokeStyle = `rgba(231,76,60,${pulse})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(v.x, v.y, 18, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  // Drawing preview
+  if (drawing && drawPath.length > 1) {
+    ctx.strokeStyle = selected ? `${selected.color}aa` : 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(drawPath[0].x, drawPath[0].y);
+    for (let i = 1; i < drawPath.length; i++) ctx.lineTo(drawPath[i].x, drawPath[i].y);
+    ctx.stroke();
+  }
+
+  // Explosions
+  for (const e of explosions) {
+    ctx.globalAlpha = e.life;
+    ctx.fillStyle = e.color;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.size * e.life, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Flash
+  if (flash > 0) {
+    ctx.fillStyle = `rgba(255,0,0,${flash * 0.35})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // HUD
+  if (state === 'play') {
+    const fs = Math.min(12, W * 0.028);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, W, fs + 16);
+    ctx.fillStyle = '#eee';
+    ctx.font = `bold ${fs}px sans-serif`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(`🚗 ${score}`, 8, 7);
+    ctx.textAlign = 'center';
+    const eff = time > 0 ? (score / (time / 60000)).toFixed(1) : '0.0';
+    ctx.fillText(`⚡${eff}/min`, W * 0.4, 7);
+    ctx.fillText(`🛣️ ${vehicles.filter(v=>!v.done).length}`, W * 0.65, 7);
+    ctx.textAlign = 'right';
+    ctx.fillText(`⏱️ ${fmt(time/1000)}`, W - 8, 7);
+  }
+}
+
+// ===== Game Loop =====
+function loop(ts) {
+  if (!lastFrame) lastFrame = ts;
+  const dt = Math.min(ts - lastFrame, 50);
+  lastFrame = ts;
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+// ===== Start =====
+function startGame() {
+  state = 'play';
+  time = 0; score = 0;
+  vehicles = []; explosions = [];
+  flash = 0; spawnAcc = 0;
+  selected = null; drawing = false; drawPath = [];
+  setupLayout();
+  $('ui').classList.add('hidden');
+}
+
+function resize() {
+  const maxW = window.innerWidth, maxH = window.innerHeight;
+  const aspect = 9 / 16;
+  let cw, ch;
+  if (maxW / maxH < aspect) { cw = maxW; ch = maxW / aspect; }
+  else { ch = maxH; cw = maxH * aspect; }
+  W = 420; H = 740;
+  canvas.width = W; canvas.height = H;
+  canvas.style.width = cw + 'px'; canvas.style.height = ch + 'px';
+  setupLayout();
+}
+
+function init() {
+  resize();
+  window.addEventListener('resize', resize);
+
+  canvas.addEventListener('mousedown', onDown);
+  canvas.addEventListener('mousemove', onMove);
+  canvas.addEventListener('mouseup', onUp);
+  canvas.addEventListener('mouseleave', onUp);
+  canvas.addEventListener('touchstart', onDown, { passive: false });
+  canvas.addEventListener('touchmove', onMove, { passive: false });
+  canvas.addEventListener('touchend', onUp, { passive: false });
+  canvas.addEventListener('touchcancel', onUp, { passive: false });
+
+  $('playBtn').onclick = startGame;
+  requestAnimationFrame(loop);
+}
+
+// Polyfill
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r) {
+    r = +r || 0;
+    this.moveTo(x+r,y); this.lineTo(x+w-r,y);
+    this.quadraticCurveTo(x+w,y,x+w,y+r); this.lineTo(x+w,y+h-r);
+    this.quadraticCurveTo(x+w,y+h,x+w-r,y+h); this.lineTo(x+r,y+h);
+    this.quadraticCurveTo(x,y+h,x,y+h-r); this.lineTo(x,y+r);
+    this.quadraticCurveTo(x,y,x+r,y); this.closePath();
+  };
+}
+
+window.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>

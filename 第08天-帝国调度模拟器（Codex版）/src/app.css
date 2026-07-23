@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+:root {
+  font-family: "SFMono-Regular", "Cascadia Code", "Noto Sans SC", monospace;
+  color: #292d28;
+  background: #e9e5d9;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+button { font: inherit; }
