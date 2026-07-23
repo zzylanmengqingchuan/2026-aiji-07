@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Airport Control — ATC Line Game</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<style>
+  html,body{margin:0;height:100%;background:#0e1a12;overflow:hidden}
+  canvas{display:block;width:100vw;height:100vh;touch-action:none;cursor:crosshair}
+  #hud{position:fixed;top:10px;left:10px;background:rgba(0,0,0,.55);color:#eee;
+       font:13px/1.55 ui-monospace,Menlo,monospace;padding:8px 12px;border-radius:8px;
+       cursor:pointer;user-select:none;-webkit-user-select:none;z-index:5}
+  #hud .hdr{color:#9fd6a0;font-weight:bold}
+  #hud.collapsed .body{display:none}
+  #hud .row{white-space:nowrap}
+  #hud button{font:12px ui-monospace,monospace;padding:2px 8px;cursor:pointer}
+  .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+           background:rgba(0,0,0,.6);color:#fff;font:16px/1.8 ui-monospace,monospace;
+           flex-direction:column;gap:6px;text-align:center;z-index:10}
+  .overlay h2{margin:0 0 6px;font-size:30px;letter-spacing:3px}
+  .overlay button{font:16px ui-monospace,monospace;padding:10px 26px;margin-top:12px;cursor:pointer}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="hud">
+  <div class="hdr">▤ ATC — Airport Control</div>
+  <div class="body">
+    <div class="row">Landings: <span id="hLand">0</span></div>
+    <div class="row">Departures: <span id="hDep">0</span></div>
+    <div class="row">Elapsed: <span id="hTime">0:00</span></div>
+    <div class="row">Pace: <span id="hPace">—</span>/min</div>
+    <div class="row"><span id="hAirport">0</span> planes at the airport</div>
+    <div class="row">Best: <span id="hBest">0</span></div>
+    <div id="depLines"></div>
+    <div class="row" style="margin-top:4px">
+      <button id="sndBtn">Sound: on</button>
+      <span style="opacity:.7">Space=pause M=mute</span>
+    </div>
+  </div>
+</div>
+
+<div id="paused" class="overlay hidden"><h2>PAUSED</h2><div>press Space to resume</div></div>
+
+<div id="gameover" class="overlay hidden">
+  <h2>GAME OVER</h2>
+  <div id="goStats"></div>
+  <button id="againBtn">Play again</button>
+</div>
+
+<script>
+'use strict';
+/* =====================================================================
+   Airport Control — an ATC line-drawing game (single file, no deps).
+   World: 120 x 80 units, letterboxed to the window.
+   Plane states: warning -> flying -> (landing roll) -> taxiin -> parked
+                 -> taxiout -> holding -> departing -> (gone)
+   ===================================================================== */
+
+const W = 120, H = 80;
+const TAU = Math.PI * 2;
+
+const TYPES = {
+  yellow: { color: '#facc15', speed: 7, r: 2.4, w: 3 },
+  blue:   { color: '#3b82f6', speed: 8, r: 2.6, w: 3 },
+  red:    { color: '#f05252', speed: 9, r: 2.8, w: 2 },
+};
+const GRAY_BODY = '#a7afb3', GRAY_DARK = '#515b62';   // outbound / ground-handling livery
+
+/* ---------------- runways ----------------
+   a = threshold (approach end, colored dot), b = far end.
+   Landing / takeoff direction is a -> b. Thresholds are pulled
+   12+ units inward from the nearest map edge for maneuvering room. */
+function mkRunway(name, ax, ay, bx, by, hold, slotBack, taxiIn, taxiOut) {
+  const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy);
+  return {
+    name, color: TYPES[name].color,
+    a: { x: ax, y: ay }, b: { x: bx, y: by },
+    dir: { x: dx / L, y: dy / L }, L,
+    hold, slotBack, taxiIn, taxiOut,   // ground geometry
+    timer: 8, queue: [],               // departure release state
+  };
+}
+const RUNWAYS = {
+  yellow: mkRunway('yellow', 26, 44, 46, 44, { x: 22, y: 47 }, { x: -1, y: 0 },
+                   [[47, 52], [48, 56]], [[46, 58], [34, 52], [27, 48]]),
+  blue:   mkRunway('blue', 60, 16, 60, 36, { x: 63.5, y: 18.5 }, { x: 1, y: 0 },
+                   [[64, 40], [80, 46], [80, 58]], [[80, 58], [80, 34], [70, 22], [64, 19.5]]),
+  red:    mkRunway('red', 98, 62, 98, 42, { x: 94.5, y: 65 }, { x: -1, y: 0 },
+                   [[94, 48], [86, 55], [80, 58]], [[84, 58], [89, 61]]),
+};
+function slotPos(rw, k) {
+  return { x: rw.hold.x + rw.slotBack.x * k * 4.5, y: rw.hold.y + rw.slotBack.y * k * 4.5 };
+}
+
+/* ---------------- terminal / parking / decor ---------------- */
+const TERMINAL = { x: 52, y: 46, w: 24, h: 10 };
+const TOWER = { x: 48.5, y: 49 };
+const SPOTS = [];
+for (let row = 0; row < 2; row++)
+  for (let i = 0; i < 7; i++)
+    SPOTS.push({ x: 52 + i * 4, y: 59.5 + row * 4, taken: null });
+
+// deterministic pseudo-random trees, kept clear of runways / buildings
+let _seed = 7;
+function srand() { _seed = (_seed * 16807) % 2147483647; return (_seed - 1) / 2147483646; }
+function distToSeg(px, py, a, b) {
+  const vx = b.x - a.x, vy = b.y - a.y, wx = px - a.x, wy = py - a.y;
+  const t = Math.max(0, Math.min(1, (vx * wx + vy * wy) / (vx * vx + vy * vy)));
+  return Math.hypot(px - (a.x + vx * t), py - (a.y + vy * t));
+}
+const TREES = [];
+while (TREES.length < 46) {
+  const x = 2 + srand() * (W - 4), y = 2 + srand() * (H - 4);
+  let ok = y < 68; // keep the river bank clear
+  for (const k in RUNWAYS) if (distToSeg(x, y, RUNWAYS[k].a, RUNWAYS[k].b) < 5.5) ok = false;
+  if (x > TERMINAL.x - 4 && x < TERMINAL.x + TERMINAL.w + 4 &&
+      y > TERMINAL.y - 4 && y < 67) ok = false;
+  if (ok) TREES.push({ x, y, r: 0.9 + srand() * 0.9 });
+}
+const RIVER = [[0, 75], [20, 71], [40, 74], [60, 70], [80, 74], [100, 71], [120, 74]];
+
+/* ---------------- utils ---------------- */
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const dist = (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1);
+const outOfMap = (p, m) => p.x < -m || p.x > W + m || p.y < -m || p.y > H + m;
+const wrapAngle = a => Math.atan2(Math.sin(a), Math.cos(a));
+function hexMix(a, b, t) {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const r = Math.round(((pa >> 16) & 255) * (1 - t) + ((pb >> 16) & 255) * t);
+  const g = Math.round(((pa >> 8) & 255) * (1 - t) + ((pb >> 8) & 255) * t);
+  const bl = Math.round((pa & 255) * (1 - t) + (pb & 255) * t);
+  return `rgb(${r},${g},${bl})`;
+}
+// closest approach distance of two constant-velocity points over [0,T]
+function closestApproach(x1, y1, vx1, vy1, x2, y2, vx2, vy2, T) {
+  const rx = x1 - x2, ry = y1 - y2, vx = vx1 - vx2, vy = vy1 - vy2;
+  const vv = vx * vx + vy * vy;
+  const t = vv < 1e-6 ? 0 : clamp(-(rx * vx + ry * vy) / vv, 0, T);
+  return Math.hypot(rx + vx * t, ry + vy * t);
+}
+
+/* ---------------- game state ---------------- */
+let planes = [], floaters = [], effects = [];
+let landings = 0, departures = 0, elapsed = 0, gTime = 0;
+let spawnTimer = 2, lastEdge = null, nextId = 1;
+let gameOver = false, paused = false, crashShown = false;
+let firstLandingDone = false, tutorialPlane = null;
+let draw = null;                       // active line-drawing gesture
+let hoverPlane = null;                 // flying plane under the cursor
+let best = 0;
+try { best = +localStorage.getItem('atc-best') || 0; } catch (e) {}
+
+function diffT() { return Math.min(1, elapsed / 300); }
+
+function reset() {
+  planes = []; floaters = []; effects = [];
+  landings = 0; departures = 0; elapsed = 0;
+  spawnTimer = 2; lastEdge = null;
+  gameOver = false; paused = false; crashShown = false;
+  firstLandingDone = false; tutorialPlane = null; draw = null; hoverPlane = null;
+  for (const k in RUNWAYS) { RUNWAYS[k].timer = 8; RUNWAYS[k].queue = []; }
+  for (const s of SPOTS) s.taken = null;
+  el.paused.classList.add('hidden');
+  el.gameover.classList.add('hidden');
+}
+
+/* ---------------- audio (WebAudio synth) ---------------- */
+let soundOn = true, actx = null;
+function audio() {
+  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function tone(f0, f1, dur, type, vol, when = 0) {
+  if (!soundOn) return;
+  try {
+    const a = audio(), o = a.createOscillator(), g = a.createGain(), t0 = a.currentTime + when;
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t0);
+    if (f1) o.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(a.destination);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  } catch (e) {}
+}
+function noiseBurst(dur, vol) {
+  if (!soundOn) return;
+  try {
+    const a = audio(), n = Math.floor(a.sampleRate * dur);
+    const buf = a.createBuffer(1, n, a.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = a.createBufferSource(), g = a.createGain(), f = a.createBiquadFilter();
+    src.buffer = buf; f.type = 'lowpass'; f.frequency.value = 900;
+    g.gain.value = vol;
+    src.connect(f); f.connect(g); g.connect(a.destination); src.start();
+  } catch (e) {}
+}
+const sndLand  = () => { tone(880, 880, 0.1, 'sine', 0.12); tone(1318, 1318, 0.22, 'sine', 0.12, 0.09); };
+const sndGo    = () => tone(160, 950, 0.8, 'sawtooth', 0.06);
+const sndCrash = () => { noiseBurst(0.9, 0.35); tone(120, 40, 0.7, 'square', 0.15); };
+
+/* ---------------- spawning ----------------
+   Spawn point = random edge point pushed 24 units inward along the edge
+   normal; heading aims at the map centroid + random offset, so arrivals
+   always fly roughly toward the middle and rarely need a U-turn. */
+const WARN_TIME = 2.4;
+function airCount() { // flying + approach + warnings count toward the cap
+  return planes.filter(p => p.state === 'warning' || p.state === 'flying').length;
+}
+function pickType() {
+  let r = Math.random() * 8;
+  for (const k of ['yellow', 'blue', 'red']) { r -= TYPES[k].w; if (r <= 0) return k; }
+  return 'yellow';
+}
+function makeCandidate(type) {
+  const edges = ['top', 'bottom', 'left', 'right'];
+  const edge = edges[(Math.random() * 4) | 0];
+  const M = 20, IN = 24;                 // >=20 from every edge, 24 inward
+  let x, y;
+  if (edge === 'left')       { x = IN;     y = M + Math.random() * (H - 2 * M); }
+  else if (edge === 'right') { x = W - IN; y = M + Math.random() * (H - 2 * M); }
+  else if (edge === 'top')   { y = IN;     x = M + Math.random() * (W - 2 * M); }
+  else                       { y = H - IN; x = M + Math.random() * (W - 2 * M); }
+  const tx = W / 2 + (Math.random() * 2 - 1) * (W / 6);
+  const ty = H / 2 + (Math.random() * 2 - 1) * (H / 6);
+  return { type, edge, x, y, heading: Math.atan2(ty - y, tx - x), speed: TYPES[type].speed };
+}
+// 10-second straight-line conflict probe (used at spawn and warning expiry)
+function conflictAt(x, y, heading, speed, except) {
+  const vx = Math.cos(heading) * speed, vy = Math.sin(heading) * speed;
+  for (const p of planes) {
+    if (p === except) continue;
+    if (p.state === 'warning') { if (dist(p.x, p.y, x, y) < 6) return true; continue; }
+    if (p.state !== 'flying') continue;
+    if (closestApproach(x, y, vx, vy, p.x, p.y,
+        Math.cos(p.heading) * p.speed, Math.sin(p.heading) * p.speed, 10) < 9) return true;
+  }
+  return false;
+}
+function scoreCandidate(c) {
+  let m = 1e9;
+  const cvx = Math.cos(c.heading) * c.speed, cvy = Math.sin(c.heading) * c.speed;
+  for (const p of planes) {
+    if (p.state === 'warning') { m = Math.min(m, dist(p.x, p.y, c.x, c.y) + 2); continue; }
+    if (p.state !== 'flying') continue;
+    m = Math.min(m, closestApproach(c.x, c.y, cvx, cvy,
+      p.x, p.y, Math.cos(p.heading) * p.speed, Math.sin(p.heading) * p.speed, 12));
+  }
+  if (c.edge === lastEdge) m -= 3;      // discourage repeating the same edge
+  return m;
+}
+function trySpawn() {
+  if (airCount() >= Math.round(lerp(3, 12, diffT()))) return;
+  const type = pickType();
+  let bestC = null;
+  for (let i = 0; i < 5; i++) {           // up to 5 candidate edge/heading combos
+    const c = makeCandidate(type);
+    c.score = scoreCandidate(c);
+    if (!bestC || c.score > bestC.score) bestC = c;
+  }
+  lastEdge = bestC.edge;
+  planes.push({
+    id: nextId++, type, state: 'warning',
+    x: bestC.x, y: bestC.y, heading: bestC.heading,
+    speed: TYPES[type].speed, r: TYPES[type].r,
+    age: 0, warnT: WARN_TIME, rerolls: 0, path: [], intent: null,
+    spot: null, rw: null, warn: false,
+    vHeading: bestC.heading, visScale: 1, bank: 0,
+  });
+}
+
+/* ---------------- path smoothing pipeline ---------------- */
+// Be(points): decimate (keep first, keep mid points >=4.2 from last kept,
+// always keep last), then one Laplacian pass on the interior points.
+function smoothPath(points) {
+  if (points.length <= 2) return points.slice();
+  const keep = [points[0]];
+  for (let i = 1; i < points.length - 1; i++) {
+    const l = keep[keep.length - 1];
+    if (dist(points[i].x, points[i].y, l.x, l.y) >= 4.2) keep.push(points[i]);
+  }
+  keep.push(points[points.length - 1]);
+  if (keep.length <= 2) return keep;
+  const out = [keep[0]];
+  for (let i = 1; i < keep.length - 1; i++) {
+    out.push({
+      x: keep[i].x * 0.5 + 0.25 * (keep[i - 1].x + keep[i + 1].x),
+      y: keep[i].y * 0.5 + 0.25 * (keep[i - 1].y + keep[i + 1].y),
+    });
+  }
+  out.push(keep[keep.length - 1]);
+  return out;
+}
+function cubicBezier(p0, c1, c2, p1, t) {
+  const u = 1 - t;
+  return {
+    x: u * u * u * p0.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * p1.x,
+    y: u * u * u * p0.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * p1.y,
+  };
+}
+// snap verdict for a path end point: eligible / wrongdir / wrongcolor / null
+const SNAP_R = 10;
+function evalSnap(p, pt) {
+  const ok = RUNWAYS[p.type];
+  if (dist(pt.x, pt.y, ok.a.x, ok.a.y) <= SNAP_R) return { kind: 'eligible', rw: ok };
+  for (const k in RUNWAYS) {
+    const rw = RUNWAYS[k];
+    if (dist(pt.x, pt.y, rw.b.x, rw.b.y) <= SNAP_R) return { kind: 'wrongdir', rw };
+  }
+  for (const k in RUNWAYS) {
+    if (k === p.type) continue;
+    const rw = RUNWAYS[k];
+    if (dist(pt.x, pt.y, rw.a.x, rw.a.y) <= SNAP_R) return { kind: 'wrongcolor', rw };
+  }
+  return null;
+}
+
+/* ---------------- path following ---------------- */
+function followPath(p, dt, sp, stopPt) {
+  let d = sp * dt;
+  while (d > 0 && p.path.length) {
+    const t = p.path[0];
+    if (stopPt && t.x === stopPt.x && t.y === stopPt.y) {  // exact snap stop
+      p.x = t.x; p.y = t.y; p.path.shift(); return d;
+    }
+    const dx = t.x - p.x, dy = t.y - p.y, dd = Math.hypot(dx, dy);
+    if (dd < 0.001) { p.path.shift(); continue; }
+    if (dd <= d) { p.x = t.x; p.y = t.y; d -= dd; p.path.shift(); }
+    else { p.heading = Math.atan2(dy, dx); p.x += dx / dd * d; p.y += dy / dd * d; d = 0; }
+  }
+  if (p.path.length) p.heading = Math.atan2(p.path[0].y - p.y, p.path[0].x - p.x);
+  return d; // leftover distance when the path ran out
+}
+function moveToward(p, t, sp, dt) {
+  const dx = t.x - p.x, dy = t.y - p.y, dd = Math.hypot(dx, dy), step = sp * dt;
+  if (dd <= step) { p.x = t.x; p.y = t.y; return true; }
+  p.heading = Math.atan2(dy, dx);
+  p.x += dx / dd * step; p.y += dy / dd * step;
+  return false;
+}
+// visual heading eases toward the logical heading; bank follows the turn
+function updateVisual(p, dt) {
+  const f = 1 - Math.pow(1 - 0.34, dt * 60);   // ~0.34/frame at 60 fps
+  const diff = wrapAngle(p.heading - p.vHeading);
+  p.vHeading += diff * f;
+  const bt = clamp(diff * 2.4, -0.7, 0.7);
+  p.bank += (bt - p.bank) * Math.min(1, dt * 6);
+  const air = p.state === 'warning' || p.state === 'flying' ||
+    (p.state === 'departing' && (p.phase === 'roll' || p.phase === 'air'));
+  const target = air ? 1 : 0.54;               // ground planes shrink to ~54%
+  p.visScale += (target - p.visScale) * Math.min(1, dt * 3.5);
+}
+
+/* ---------------- landing / ground handling ---------------- */
+function reserveSpot(p) {
+  for (const s of SPOTS) if (!s.taken) { s.taken = p; p.spot = s; return true; }
+  return false;
+}
+function touchDown(p) {
+  const rw = p.intent.rw;
+  p.x = rw.a.x; p.y = rw.a.y;
+  p.heading = Math.atan2(rw.dir.y, rw.dir.x);
+  p.vHeading = p.heading; p.bank = 0;
+  p.state = 'landing'; p.phase = 'roll'; p.rw = rw;
+  p.rollS = 0; p.rollV = p.speed;
+  p.rollDec = (p.speed * p.speed) / (2 * rw.L * 0.8);
+  p.path = []; p.intent = null;
+  landings++;
+  sndLand();
+  if (!firstLandingDone) { firstLandingDone = true; tutorialPlane = null; }
+  reserveSpot(p);
+}
+function startTaxiOut(p) {
+  const rw = RUNWAYS[p.type];
+  p.rw = rw;
+  rw.queue.push(p);
+  if (p.spot) { p.spot.taken = null; p.spot = null; }
+  p.state = 'taxiout';
+  const via = rw.taxiOut.map(q => ({ x: q[0], y: q[1] }));
+  p.path = [{ x: p.x, y: p.y }, ...via, slotPos(rw, rw.queue.length - 1)];
+}
+function departureConflict(rw, f) {
+  const vx = rw.dir.x * f.speed * 1.7, vy = rw.dir.y * f.speed * 1.7;
+  for (const q of planes) {
+    if (q === f || q.state !== 'departing' || q.phase !== 'air') continue;
+    const ca = closestApproach(rw.a.x, rw.a.y, vx, vy, q.x, q.y,
+      Math.cos(q.heading) * (q.v || q.speed), Math.sin(q.heading) * (q.v || q.speed), 8);
+    if (ca < 9) return true;
+  }
+  return false;
+}
+function removePlane(p) {
+  const i = planes.indexOf(p);
+  if (i >= 0) planes.splice(i, 1);
+  if (p.spot) { p.spot.taken = null; p.spot = null; }
+  if (p.rw) { const j = p.rw.queue.indexOf(p); if (j >= 0) p.rw.queue.splice(j, 1); }
+  if (tutorialPlane === p) tutorialPlane = null;
+  if (hoverPlane === p) hoverPlane = null;
+  if (draw && draw.plane === p) draw = null;
+}
+
+/* ---------------- per-state updates ---------------- */
+function updatePlane(p, dt) {
+  updateVisual(p, dt);
+  switch (p.state) {
+    case 'warning':
+      p.age += dt; p.warnT -= dt;
+      if (p.warnT <= 0) {
+        // re-validate with a 10s straight-line prediction before entering
+        if (!conflictAt(p.x, p.y, p.heading, p.speed, p) || p.rerolls >= 6) {
+          p.state = 'flying'; p.age = 0;
+          if (!firstLandingDone && !tutorialPlane) tutorialPlane = p;
+        } else {
+          // conflict: re-roll position/heading and restart the warning
+          let c = null;
+          for (let i = 0; i < 5; i++) {
+            c = makeCandidate(p.type);
+            if (!conflictAt(c.x, c.y, c.heading, c.speed, p)) break;
+          }
+          p.x = c.x; p.y = c.y; p.heading = c.heading;
+          p.warnT = WARN_TIME; p.rerolls++;
+        }
+      }
+      break;
+
+    case 'flying': {
+      p.age += dt;
+      if (p.path.length) {
+        const stop = p.intent ? p.intent.rw.a : null;
+        const left = followPath(p, dt, p.speed, stop);
+        if (p.intent && p.x === p.intent.rw.a.x && p.y === p.intent.rw.a.y) {
+          touchDown(p); break;                 // snapped onto the threshold
+        }
+        if (left > 0) {                        // path exhausted this frame
+          if (p.intent) { touchDown(p); break; }
+          p.x += Math.cos(p.heading) * left; p.y += Math.sin(p.heading) * left;
+        }
+      } else {
+        p.x += Math.cos(p.heading) * p.speed * dt;
+        p.y += Math.sin(p.heading) * p.speed * dt;
+      }
+      // unguided planes leaving the map (+margin) vanish silently, no penalty
+      if (p.state === 'flying' && !p.intent && outOfMap(p, 12)) removePlane(p);
+      break;
+    }
+
+    case 'landing': {                          // ground roll along the runway
+      const rw = p.rw;
+      if (p.rollV > 0) {
+        p.rollV = Math.max(0, p.rollV - p.rollDec * dt);
+        p.rollS += p.rollV * dt;
+      }
+      p.rollS = Math.min(p.rollS, rw.L);
+      p.x = rw.a.x + rw.dir.x * p.rollS;
+      p.y = rw.a.y + rw.dir.y * p.rollS;
+      if (p.rollS >= rw.L || p.rollV < 2.2) {
+        if (!p.spot && !reserveSpot(p)) break;   // apron full: wait at runway end
+        p.state = 'taxiin';
+        const via = rw.taxiIn.map(q => ({ x: q[0], y: q[1] }));
+        p.path = [{ x: p.x, y: p.y }, ...via, { x: p.spot.x, y: p.spot.y }];
+      }
+      break;
+    }
+
+    case 'taxiin':
+      followPath(p, dt, 3.2);
+      if (p.path.length === 0) {
+        p.state = 'parked';
+        p.parkedT = 4 + Math.random() * 4;
+        p.x = p.spot.x; p.y = p.spot.y;
+      }
+      break;
+
+    case 'parked':
+      p.parkedT -= dt;
+      if (p.parkedT <= 0) startTaxiOut(p);
+      break;
+
+    case 'taxiout':
+      followPath(p, dt, 3.2);
+      if (p.path.length === 0) p.state = 'holding';
+      break;
+
+    case 'holding': {                          // creep forward in the queue
+      const idx = Math.max(0, p.rw.queue.indexOf(p));
+      const sp = slotPos(p.rw, idx);
+      if (moveToward(p, sp, 3.0, dt))
+        p.heading = Math.atan2(p.rw.dir.y, p.rw.dir.x);
+      break;
+    }
+
+    case 'departing': {
+      const rw = p.rw;
+      if (p.phase === 'lineup') {
+        if (moveToward(p, rw.a, 3.2, dt)) { p.phase = 'roll'; p.v = 3.0; p.rollS = 0; sndGo(); }
+      } else if (p.phase === 'roll') {
+        p.v = Math.min(p.v + 7 * dt, p.speed * 1.9);
+        p.rollS += p.v * dt;
+        p.x = rw.a.x + rw.dir.x * p.rollS;
+        p.y = rw.a.y + rw.dir.y * p.rollS;
+        if (p.rollS > rw.L * 0.5 && p.v > p.speed * 1.1) p.phase = 'air';
+      } else {                                 // airborne climb-out
+        p.v = Math.min(p.v + 4 * dt, p.speed * 2);
+        p.heading = Math.atan2(rw.dir.y, rw.dir.x);
+        p.x += Math.cos(p.heading) * p.v * dt;
+        p.y += Math.sin(p.heading) * p.v * dt;
+        if (outOfMap(p, 12)) { departures++; removePlane(p); }
+      }
+      break;
+    }
+  }
+}
+
+function updateRunways(dt) {
+  for (const k in RUNWAYS) {
+    const rw = RUNWAYS[k];
+    if (rw.queue.length === 0) { rw.timer = 8; continue; }
+    rw.timer -= dt;
+    if (rw.timer <= 0) {
+      const f = rw.queue[0];
+      if (f.state === 'holding' && dist(f.x, f.y, rw.hold.x, rw.hold.y) < 0.8) {
+        if (!departureConflict(rw, f)) {
+          rw.queue.shift();
+          f.state = 'departing'; f.phase = 'lineup';
+          rw.timer = 8;
+        } else rw.timer = 2.5;                 // conflict: delay and retry
+      } else rw.timer = 0.3;                   // front not ready yet
+    }
+  }
+}
+
+function checkCollisions() {
+  const air = planes.filter(p =>
+    (p.state === 'flying' || (p.state === 'departing' && p.phase === 'air')) && p.age > 2);
+  for (const p of air) p.warn = false;
+  for (let i = 0; i < air.length; i++)
+    for (let j = i + 1; j < air.length; j++) {
+      const a = air[i], b = air[j];
+      const d = dist(a.x, a.y, b.x, b.y);
+      if (d < a.r + b.r) { crash(a, b); return; }
+      if (d < (a.r + b.r) * 3.2) { a.warn = true; b.warn = true; }
+    }
+}
+function crash(a, b) {
+  gameOver = true;
+  sndCrash();
+  effects.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, t: 0 });
+  const total = landings + departures;
+  if (total > best) { best = total; try { localStorage.setItem('atc-best', best); } catch (e) {} }
+  setTimeout(showGameOver, 900);
+}
+function showGameOver() {
+  if (crashShown) return;
+  crashShown = true;
+  const mm = String(Math.floor(elapsed / 60)), ss = String(Math.floor(elapsed % 60)).padStart(2, '0');
+  const pace = elapsed > 1 ? ((landings + departures) * 60 / elapsed).toFixed(1) : '0';
+  el.goStats.innerHTML =
+    `Landings: ${landings} &nbsp; Departures: ${departures}<br>` +
+    `Time: ${mm}:${ss} &nbsp; Pace: ${pace}/min<br>` +
+    `Best: ${best}`;
+  el.gameover.classList.remove('hidden');
+}
+
+/* ---------------- floaters / effects ---------------- */
+function addFloater(x, y, txt, color) {
+  floaters.push({ x, y, txt, color, t: 0, ttl: 1.6 });
+}
+function updateFloaters(dt) {
+  for (let i = floaters.length - 1; i >= 0; i--) {
+    floaters[i].t += dt;
+    if (floaters[i].t > floaters[i].ttl) floaters.splice(i, 1);
+  }
+}
+function updateEffects(dt) {
+  for (let i = effects.length - 1; i >= 0; i--) {
+    effects[i].t += dt;
+    if (effects[i].t > 1.2) effects.splice(i, 1);
+  }
+}
+
+/* ---------------- main update ---------------- */
+function update(dt) {
+  elapsed += dt;
+  spawnTimer -= dt;
+  if (spawnTimer <= 0) {
+    spawnTimer = lerp(5.2, 1.4, diffT()) * (0.85 + Math.random() * 0.3);
+    trySpawn();
+  }
+  for (let i = planes.length - 1; i >= 0; i--) updatePlane(planes[i], dt);
+  updateRunways(dt);
+  checkCollisions();
+  updateFloaters(dt);
+  updateEffects(dt);
+}
+
+/* ---------------- input: line drawing ---------------- */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const el = {
+  hud: document.getElementById('hud'),
+  paused: document.getElementById('paused'),
+  gameover: document.getElementById('gameover'),
+  goStats: document.getElementById('goStats'),
+  land: document.getElementById('hLand'), dep: document.getElementById('hDep'),
+  time: document.getElementById('hTime'), pace: document.getElementById('hPace'),
+  airport: document.getElementById('hAirport'), best: document.getElementById('hBest'),
+  depLines: document.getElementById('depLines'),
+  sndBtn: document.getElementById('sndBtn'),
+};
+const view = { s: 1, ox: 0, oy: 0 };
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(innerWidth * dpr);
+  cv.height = Math.round(innerHeight * dpr);
+  view.s = Math.min(cv.width / W, cv.height / H);
+  view.ox = (cv.width - W * view.s) / 2;
+  view.oy = (cv.height - H * view.s) / 2;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function toWorld(e) {
+  const rect = cv.getBoundingClientRect();
+  const px = (e.clientX - rect.left) * (cv.width / rect.width);
+  const py = (e.clientY - rect.top) * (cv.height / rect.height);
+  return { x: (px - view.ox) / view.s, y: (py - view.oy) / view.s };
+}
+function pickPlane(w) {
+  let hit = null, hd = 6;                    // pick radius ~6 units
+  for (const p of planes) {
+    if (p.state !== 'flying') continue;
+    const d = dist(p.x, p.y, w.x, w.y);
+    if (d < hd) { hd = d; hit = p; }
+  }
+  return hit;
+}
+cv.addEventListener('pointerdown', e => {
+  try { audio(); } catch (err) {}
+  if (gameOver || paused) return;
+  const w = toWorld(e);
+  const p = pickPlane(w);
+  if (p) {
+    draw = { plane: p, pts: [w] };
+    cv.setPointerCapture(e.pointerId);
+  }
+});
+cv.addEventListener('pointermove', e => {
+  const w = toWorld(e);
+  if (!draw) {
+    hoverPlane = (gameOver || paused) ? null : pickPlane(w);
+    return;
+  }
+  const last = draw.pts[draw.pts.length - 1];
+  if (dist(w.x, w.y, last.x, last.y) >= 1.4 && draw.pts.length < 600) // drag sampling
+    draw.pts.push(w);
+});
+function endDraw() {
+  if (!draw) return;
+  const p = draw.plane, raw = draw.pts;
+  draw = null;
+  if (!planes.includes(p) || raw.length < 2) return;
+  const snap = evalSnap(p, raw[raw.length - 1]);   // verdict uses the last SAMPLE
+  if (snap && snap.kind === 'eligible') {
+    const rw = snap.rw;
+    const pts = raw.slice();
+    // pop tail points already inside the snap circle, then smooth the rest
+    while (pts.length && dist(pts[pts.length - 1].x, pts[pts.length - 1].y, rw.a.x, rw.a.y) <= SNAP_R)
+      pts.pop();
+    const path = [{ x: p.x, y: p.y }, ...smoothPath(pts)];
+    const o = path[path.length - 1];
+    if (dist(o.x, o.y, rw.a.x, rw.a.y) > 0.01) {
+      // cubic bezier from o onto the threshold, tangent-aligned to the runway
+      const d = dist(o.x, o.y, rw.a.x, rw.a.y);
+      const c1 = { x: o.x + (rw.a.x - o.x) / d * d * 0.35, y: o.y + (rw.a.y - o.y) / d * d * 0.35 };
+      const f = Math.max(0, (o.x - rw.a.x) * rw.dir.x + (o.y - rw.a.y) * rw.dir.y);
+      const back = Math.min(d * 0.3, f * 0.5);
+      const c2 = { x: rw.a.x - rw.dir.x * back, y: rw.a.y - rw.dir.y * back };
+      for (let i = 1; i <= 6; i++) path.push(cubicBezier(o, c1, c2, rw.a, i / 6));
+    }
+    // forced snap: approach center, then the runway end (exact coordinates)
+    path.push({ x: rw.a.x, y: rw.a.y }, { x: rw.b.x, y: rw.b.y });
+    p.path = path;
+    p.intent = { rw };
+  } else if (snap) {                            // rejected path
+    addFloater(snap.rw.a.x, snap.rw.a.y - 3,
+      snap.kind === 'wrongdir' ? 'Wrong direction' : 'Wrong color', '#ffffff');
+    p.path = []; p.intent = null;               // cleared; plane flies on
+  } else {                                      // ordinary path
+    p.path = [{ x: p.x, y: p.y }, ...smoothPath(raw)];
+    p.intent = null;
+  }
+}
+cv.addEventListener('pointerup', endDraw);
+cv.addEventListener('pointercancel', () => { draw = null; });
+
+/* ---------------- keyboard / buttons ---------------- */
+function togglePause() {
+  if (gameOver) return;
+  paused = !paused;
+  el.paused.classList.toggle('hidden', !paused);
+}
+function toggleMute() {
+  soundOn = !soundOn;
+  el.sndBtn.textContent = 'Sound: ' + (soundOn ? 'on' : 'off');
+}
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+  else if (e.key === 'm' || e.key === 'M') toggleMute();
+});
+window.addEventListener('blur', () => { if (!gameOver && !paused) togglePause(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && !gameOver && !paused) togglePause();
+});
+el.hud.addEventListener('click', e => {
+  if (e.target !== el.sndBtn) el.hud.classList.toggle('collapsed');
+});
+el.sndBtn.addEventListener('click', toggleMute);
+document.getElementById('againBtn').addEventListener('click', reset);
+
+/* ---------------- rendering ---------------- */
+function polyline(pts) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0] !== undefined ? pts[0][0] : pts[0].x,
+             pts[0][1] !== undefined ? pts[0][1] : pts[0].y);
+  for (let i = 1; i < pts.length; i++)
+    ctx.lineTo(pts[i][0] !== undefined ? pts[i][0] : pts[i].x,
+               pts[i][1] !== undefined ? pts[i][1] : pts[i].y);
+}
+function drawRunway(rw) {
+  ctx.save();
+  ctx.translate(rw.a.x, rw.a.y);
+  ctx.rotate(Math.atan2(rw.dir.y, rw.dir.x));
+  ctx.fillStyle = '#5b5f66';
+  ctx.fillRect(0, -1.5, rw.L, 3);
+  ctx.strokeStyle = 'rgba(255,255,255,.75)';
+  ctx.lineWidth = 0.28;
+  ctx.setLineDash([1.6, 1.6]);
+  ctx.beginPath(); ctx.moveTo(1, 0); ctx.lineTo(rw.L - 1, 0); ctx.stroke();
+  ctx.setLineDash([]);
+  // direction chevrons in runway color
+  ctx.fillStyle = rw.color;
+  for (let i = 1; i <= 3; i++) {
+    const x = rw.L * i / 4;
+    ctx.beginPath();
+    ctx.moveTo(x + 1.1, 0); ctx.lineTo(x - 0.4, 0.8); ctx.lineTo(x - 0.4, -0.8);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+  // threshold: big colored dot at the approach end
+  ctx.beginPath(); ctx.arc(rw.a.x, rw.a.y, 2.2, 0, TAU);
+  ctx.fillStyle = rw.color; ctx.fill();
+  ctx.lineWidth = 0.35; ctx.strokeStyle = '#fff'; ctx.stroke();
+  // hold-short marker
+  ctx.beginPath(); ctx.arc(rw.hold.x, rw.hold.y, 0.8, 0, TAU);
+  ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fill();
+}
+
+/* toy airliner, top-down: rounded fuselage with nose gradient, swept main
+   wings, horizontal + vertical tail, cockpit dot, dark outline */
+function planeColors(p) {
+  if (p.state === 'taxiout' || p.state === 'holding' || p.state === 'departing')
+    return { body: GRAY_BODY, dark: GRAY_DARK };
+  const c = TYPES[p.type].color;
+  return { body: c, dark: hexMix(c, '#101418', 0.55) };
+}
+function tracePlane(r) {          // full silhouette (wings + tail + fuselage)
+  ctx.beginPath();
+  // swept main wings
+  ctx.moveTo(0.55 * r, -0.18 * r);
+  ctx.lineTo(-0.55 * r, -1.5 * r); ctx.lineTo(-0.95 * r, -1.5 * r);
+  ctx.lineTo(-0.28 * r, -0.18 * r); ctx.closePath();
+  ctx.moveTo(0.55 * r, 0.18 * r);
+  ctx.lineTo(-0.55 * r, 1.5 * r); ctx.lineTo(-0.95 * r, 1.5 * r);
+  ctx.lineTo(-0.28 * r, 0.18 * r); ctx.closePath();
+  // horizontal tail
+  ctx.moveTo(-1.0 * r, -0.14 * r);
+  ctx.lineTo(-1.5 * r, -0.66 * r); ctx.lineTo(-1.68 * r, -0.66 * r);
+  ctx.lineTo(-1.3 * r, -0.14 * r); ctx.closePath();
+  ctx.moveTo(-1.0 * r, 0.14 * r);
+  ctx.lineTo(-1.5 * r, 0.66 * r); ctx.lineTo(-1.68 * r, 0.66 * r);
+  ctx.lineTo(-1.3 * r, 0.14 * r); ctx.closePath();
+  // vertical tail fin (slim, on the centerline)
+  ctx.moveTo(-1.1 * r, 0);
+  ctx.lineTo(-1.72 * r, 0.15 * r); ctx.lineTo(-1.72 * r, -0.15 * r);
+  ctx.closePath();
+  // fuselage
+  ctx.ellipse(0.05 * r, 0, 1.5 * r, 0.42 * r, 0, 0, TAU);
+}
+function drawPlane(p) {
+  const sc = p.visScale;
+  const air = p.state === 'flying' || (p.state === 'departing' && p.phase === 'air');
+  // gentle airborne "breathing" float
+  let bx = 0, by = 0, ba = 0;
+  if (air) {
+    bx = Math.sin(gTime * 2.1 + p.id * 1.7) * 0.25;
+    by = Math.cos(gTime * 1.6 + p.id * 2.3) * 0.25;
+    ba = Math.sin(gTime * 1.8 + p.id) * 0.04;
+  }
+  const col = planeColors(p);
+  // silhouette shadow: big soft offset in the air, tight on the ground
+  const sh = air ? 1.4 : 0.22;
+  ctx.save();
+  ctx.translate(p.x + bx + sh * sc, p.y + by + sh * 1.3 * sc);
+  ctx.rotate(p.vHeading + ba);
+  ctx.scale(sc, sc);
+  tracePlane(p.r);
+  ctx.fillStyle = air ? 'rgba(0,0,0,.20)' : 'rgba(0,0,0,.30)';
+  ctx.fill();
+  ctx.restore();
+  // airframe
+  ctx.save();
+  ctx.translate(p.x + bx, p.y + by);
+  ctx.rotate(p.vHeading + ba);
+  ctx.transform(1, 0, -p.bank * 0.35, 1, 0, 0);   // bank: shear along the body
+  ctx.scale(sc, sc * (1 - Math.abs(p.bank) * 0.2));
+  tracePlane(p.r);
+  ctx.fillStyle = col.body;
+  ctx.fill();
+  ctx.lineWidth = 0.2;
+  ctx.strokeStyle = col.dark;
+  ctx.stroke();
+  // fuselage gradient (light nose -> darker tail)
+  const g = ctx.createLinearGradient(1.55 * p.r, 0, -1.45 * p.r, 0);
+  g.addColorStop(0, hexMix(col.body, '#ffffff', 0.45));
+  g.addColorStop(0.45, col.body);
+  g.addColorStop(1, hexMix(col.body, '#000000', 0.25));
+  ctx.beginPath();
+  ctx.ellipse(0.05 * p.r, 0, 1.5 * p.r, 0.42 * p.r, 0, 0, TAU);
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.strokeStyle = col.dark;
+  ctx.stroke();
+  // cockpit
+  ctx.beginPath();
+  ctx.ellipse(0.95 * p.r, 0, 0.3 * p.r, 0.2 * p.r, 0, 0, TAU);
+  ctx.fillStyle = col.dark;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(1.02 * p.r, -0.05 * p.r, 0.12 * p.r, 0.08 * p.r, 0, 0, TAU);
+  ctx.fillStyle = 'rgba(255,255,255,.75)';
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawPaths() {
+  // active guided paths: solid, plane color mixed dark, alpha ~0.5
+  for (const p of planes) {
+    if (p.state === 'flying' && p.path.length > 1) {
+      const sel = (draw && draw.plane === p) || hoverPlane === p;
+      ctx.strokeStyle = hexMix(TYPES[p.type].color, '#14202a', 0.35);
+      ctx.globalAlpha = sel ? 0.85 : 0.5;
+      ctx.lineWidth = sel ? 1.3 : 0.9;
+      polyline([{ x: p.x, y: p.y }, ...p.path]);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    // taxi-in route: thin colored solid
+    if (p.state === 'taxiin' && p.path.length > 1) {
+      ctx.strokeStyle = hexMix(TYPES[p.type].color, '#14202a', 0.35);
+      ctx.globalAlpha = 0.35; ctx.lineWidth = 0.6;
+      polyline([{ x: p.x, y: p.y }, ...p.path]);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    // outbound route: white dashed, scrolling phase, blinking
+    if (p.state === 'taxiout' && p.path.length > 1) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.globalAlpha = 0.55 + 0.3 * Math.sin(gTime * 8 + p.id);
+      ctx.lineWidth = 0.55;
+      ctx.setLineDash([3, 2]);
+      ctx.lineDashOffset = -gTime * 5;
+      polyline([{ x: p.x, y: p.y }, ...p.path]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+  }
+  // the line being drawn right now: dashed, scrolling, live snap verdict
+  if (draw && draw.pts.length > 1 && planes.includes(draw.plane)) {
+    const p = draw.plane, lastPt = draw.pts[draw.pts.length - 1];
+    const snap = evalSnap(p, lastPt);
+    let color = TYPES[p.type].color, w = 0.7;
+    if (snap) {
+      const pulse = 0.8 + 0.3 * Math.sin(gTime * 12);
+      w = pulse;
+      color = snap.kind === 'eligible'
+        ? hexMix(snap.rw.color, '#ffffff', 0.55)
+        : hexMix('#ff4040', '#ffffff', 0.25 + 0.25 * Math.sin(gTime * 12));
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = w;
+    ctx.setLineDash([3.6, 2.4]);
+    ctx.lineDashOffset = -gTime * 6;
+    polyline([{ x: p.x, y: p.y }, ...draw.pts]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // visible snap range: radius-10 ring at the approach end
+    if (snap) {
+      const rw = snap.rw, okSnap = snap.kind === 'eligible';
+      ctx.beginPath(); ctx.arc(rw.a.x, rw.a.y, SNAP_R, 0, TAU);
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = okSnap ? hexMix(rw.color, '#ffffff', 0.3) : '#ff4040';
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 0.5;
+      ctx.strokeStyle = okSnap ? rw.color : '#ff4040';
+      ctx.setLineDash([1.2, 1.2]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      // faint hint ring when the last sample nears (2x radius) any approach
+      for (const k in RUNWAYS) {
+        const rw = RUNWAYS[k];
+        if (dist(lastPt.x, lastPt.y, rw.a.x, rw.a.y) <= SNAP_R * 2) {
+          ctx.beginPath(); ctx.arc(rw.a.x, rw.a.y, SNAP_R, 0, TAU);
+          ctx.globalAlpha = 0.1;
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.globalAlpha = 0.35;
+          ctx.lineWidth = 0.35;
+          ctx.strokeStyle = rw.color;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+  }
+}
+
+function render() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#0e1a12';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.setTransform(view.s, 0, 0, view.s, view.ox, view.oy);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
+
+  // grass
+  ctx.fillStyle = '#4c8a3f';
+  ctx.fillRect(0, 0, W, H);
+  // river
+  ctx.strokeStyle = '#4a86c8'; ctx.lineWidth = 3.6;
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  polyline(RIVER); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,.15)'; ctx.lineWidth = 1.2;
+  polyline(RIVER); ctx.stroke();
+  // trees
+  for (const t of TREES) {
+    ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, TAU);
+    ctx.fillStyle = '#2e5d27'; ctx.fill();
+    ctx.beginPath(); ctx.arc(t.x - t.r * 0.25, t.y - t.r * 0.25, t.r * 0.55, 0, TAU);
+    ctx.fillStyle = '#3c7433'; ctx.fill();
+  }
+  // taxiways + apron
+  ctx.strokeStyle = '#8f8f83'; ctx.lineWidth = 1.1;
+  for (const k in RUNWAYS) {
+    const rw = RUNWAYS[k];
+    polyline([[rw.b.x, rw.b.y], ...rw.taxiIn, [78, 58]]); ctx.stroke();
+    polyline([[rw.hold.x, rw.hold.y], ...rw.taxiOut.slice().reverse(), [50, 58]]); ctx.stroke();
+  }
+  ctx.fillStyle = '#8a8f7a';
+  ctx.fillRect(50, 57.5, 28, 8);
+  // terminal + tower
+  ctx.fillStyle = '#b8b0a0';
+  ctx.fillRect(TERMINAL.x, TERMINAL.y, TERMINAL.w, TERMINAL.h);
+  ctx.fillStyle = '#9a9284';
+  for (let i = 1; i < 5; i++)
+    ctx.fillRect(TERMINAL.x + i * TERMINAL.w / 5 - 0.4, TERMINAL.y + 1, 0.8, TERMINAL.h - 2);
+  ctx.fillStyle = '#c9c2b2';
+  ctx.fillRect(TOWER.x - 0.9, TOWER.y - 2.5, 1.8, 5);
+  ctx.beginPath(); ctx.arc(TOWER.x, TOWER.y - 3, 1.3, 0, TAU);
+  ctx.fillStyle = '#d8d2c2'; ctx.fill();
+  ctx.beginPath(); ctx.arc(TOWER.x, TOWER.y - 3, 0.7, 0, TAU);
+  ctx.fillStyle = '#5b7ea6'; ctx.fill();
+  // parking spots
+  for (const s of SPOTS) {
+    ctx.strokeStyle = s.taken ? TYPES[s.taken.type].color : 'rgba(255,255,255,.55)';
+    ctx.lineWidth = 0.25;
+    ctx.strokeRect(s.x - 1.6, s.y - 1.6, 3.2, 3.2);
+  }
+  // runways
+  for (const k in RUNWAYS) drawRunway(RUNWAYS[k]);
+
+  drawPaths();
+
+  // spawn warnings: dashed circle + entry arrow + countdown arc
+  for (const p of planes) {
+    if (p.state !== 'warning') continue;
+    const c = TYPES[p.type].color;
+    ctx.strokeStyle = c; ctx.lineWidth = 0.4;
+    ctx.setLineDash([1, 1]); ctx.lineDashOffset = -gTime * 4;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3, -Math.PI / 2, -Math.PI / 2 + (1 - p.warnT / WARN_TIME) * TAU);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.5; ctx.stroke();
+    ctx.save();
+    ctx.translate(p.x + Math.cos(p.heading) * 4.4, p.y + Math.sin(p.heading) * 4.4);
+    ctx.rotate(p.heading);
+    ctx.beginPath(); ctx.moveTo(1.4, 0); ctx.lineTo(-0.6, 0.9); ctx.lineTo(-0.6, -0.9);
+    ctx.closePath(); ctx.fillStyle = c; ctx.fill();
+    ctx.restore();
+  }
+
+  // ground planes first, airborne last
+  const ground = planes.filter(p => p.state !== 'flying' && p.state !== 'warning' &&
+    !(p.state === 'departing' && p.phase === 'air'));
+  const air = planes.filter(p => p.state === 'flying' ||
+    (p.state === 'departing' && p.phase === 'air'));
+  for (const p of ground) drawPlane(p);
+  for (const p of air) drawPlane(p);
+
+  // close-call white pulsing rings
+  for (const p of air) {
+    if (!p.warn) continue;
+    const pulse = 0.5 + 0.5 * Math.sin(gTime * 10);
+    ctx.globalAlpha = 0.35 + 0.55 * pulse;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 0.35;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * 1.7 + 0.5 * pulse, 0, TAU);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // tutorial hints until the first landing
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  if (!firstLandingDone && !gameOver) {
+    if (!tutorialPlane || !planes.includes(tutorialPlane))
+      tutorialPlane = planes.find(p => p.state === 'flying') || null;
+    ctx.globalAlpha = 0.6 + 0.4 * Math.sin(gTime * 4);
+    ctx.font = '2.8px ui-monospace,monospace';
+    if (tutorialPlane) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('Drag this plane', tutorialPlane.x, tutorialPlane.y - tutorialPlane.r - 3.4);
+      const rw = RUNWAYS[tutorialPlane.type];
+      ctx.fillStyle = rw.color;
+      ctx.fillText('Match here', rw.a.x, rw.a.y - 4.6);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // floaters
+  for (const f of floaters) {
+    const a = f.t < f.ttl * 0.6 ? 1 : 1 - (f.t - f.ttl * 0.6) / (f.ttl * 0.4);
+    ctx.globalAlpha = a;
+    ctx.font = 'bold 3px ui-monospace,monospace';
+    ctx.fillStyle = f.color;
+    ctx.fillText(f.txt, f.x, f.y - f.t * 2.5);
+    ctx.globalAlpha = 1;
+  }
+
+  // explosion effects
+  for (const ef of effects) {
+    const a = 1 - ef.t / 1.2;
+    ctx.globalAlpha = a;
+    ctx.strokeStyle = '#ffb347'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.arc(ef.x, ef.y, 1 + ef.t * 14, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = '#ff5b3a'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.arc(ef.x, ef.y, 0.5 + ef.t * 8, 0, TAU); ctx.stroke();
+    ctx.fillStyle = '#fff3c0';
+    ctx.beginPath(); ctx.arc(ef.x, ef.y, Math.max(0.2, 3 - ef.t * 6), 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // world border
+  ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 0.3;
+  ctx.strokeRect(0, 0, W, H);
+  ctx.restore();
+}
+
+/* ---------------- HUD ---------------- */
+function updateHUD() {
+  el.land.textContent = landings;
+  el.dep.textContent = departures;
+  const mm = Math.floor(elapsed / 60), ss = String(Math.floor(elapsed % 60)).padStart(2, '0');
+  el.time.textContent = `${mm}:${ss}`;
+  el.pace.textContent = elapsed > 1 ? ((landings + departures) * 60 / elapsed).toFixed(1) : '—';
+  el.airport.textContent = SPOTS.filter(s => s.taken).length;
+  el.best.textContent = Math.max(best, landings + departures);
+  let html = '';
+  for (const k of ['yellow', 'blue', 'red']) {
+    const rw = RUNWAYS[k];
+    if (rw.queue.length === 0) continue;
+    const plus = rw.queue.length > 1 ? ` +${rw.queue.length - 1}` : '';
+    html += `<div class="row" style="color:${rw.color}">${k} departure in ` +
+            `${Math.max(rw.timer, 0).toFixed(1)}s${plus}</div>`;
+  }
+  el.depLines.innerHTML = html;
+}
+
+/* ---------------- main loop ---------------- */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  gTime += dt;
+  if (!paused && !gameOver) update(dt);
+  else { updateFloaters(dt); updateEffects(dt); }
+  render();
+  updateHUD();
+  requestAnimationFrame(frame);
+}
+reset();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
