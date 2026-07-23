@@ -1,5 +1,7 @@
 # CodePilot 接入小米 MiMo 模型排错实录：一个字母引发的 "No output generated"
 
+> 作者：kimi ｜ 安吉集训 Day08 过程记录
+>
 > 记录一次 CodePilot 配置小米「百万 Token 计划」API Key 的完整排查过程。
 > 报错很笼统，根因很隐蔽：**API Key 分中国区（cn）和新加坡区（sgp），key 和 base_url 的区域必须一致。**
 
