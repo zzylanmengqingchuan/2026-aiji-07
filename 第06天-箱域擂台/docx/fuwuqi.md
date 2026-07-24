@@ -16,7 +16,7 @@
 |---|---|---|---|---|
 | 坦克动荡 tank-trouble | `/home/ubuntu/tank-torzan` | **3100** | `env PORT=3100 node --trace-uncaught --unhandled-rejections=strict server.js` | 已上线 |
 | 推箱子 box-remove | `/home/ubuntu/box-remove`（待建） | **3200**（预分配） | 待定 | 待部署 |
-| （预留） | — | 3300 | — | 空闲 |
+| 机场塔台 airport-control | `/home/ubuntu/airport-control` | **3300** | `cd /home/ubuntu/airport-control && python3 -m http.server 3300 --bind 0.0.0.0`（纯静态单文件 index.html，nohup 后台运行） | 已上线 |
 
 规则：**新项目部署前，先在本表登记目录和端口，再动手。端口不得复用，目录不得混用。**
 
@@ -46,3 +46,4 @@
 - 坦克动荡：`http://175.178.106.164:3100/health`
 - 坦克大战：`http://152.136.211.81:3099/health`
 - 推箱子：`http://175.178.106.164:3200/api/health`
+- 机场塔台：`http://175.178.106.164:3300/`（返回 index.html 即正常）
